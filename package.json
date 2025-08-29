@@ -1,0 +1,30 @@
+{
+  "name": "openallianceslackbot",
+  "version": "1.0.0",
+  "description": "A Slack bot that makes API calls and sends scheduled reports",
+  "main": "bot.js",
+  "scripts": {
+    "start": "node bot.js",
+    "dev": "nodemon bot.js"
+  },
+  "dependencies": {
+    "@slack/bolt": "^3.17.1",
+    "@slack/web-api": "^7.0.2",
+    "axios": "^1.6.2",
+    "dotenv": "^16.3.1",
+    "node-cron": "^3.0.3",
+    "openai": "^4.104.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  },
+  "keywords": [
+    "slack",
+    "bot",
+    "api",
+    "scheduled",
+    "reports"
+  ],
+  "author": "Your Name",
+  "license": "MIT"
+}

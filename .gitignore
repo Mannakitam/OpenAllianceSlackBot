@@ -1,0 +1,10 @@
+.env
+#node & private stuff
+package-lock*
+certs
+server/certs
+
+node_modules
+dist
+dist-ssr
+*.local
