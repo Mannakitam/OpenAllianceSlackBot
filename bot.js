@@ -2,8 +2,8 @@ const { App } = require('@slack/bolt');
 const cron = require('node-cron');
 const axios = require('axios');
 const { OpenAI } = require('openai');
-const { getGoogleSheetsData } = require('./googleSheetsData.js')
-const { generateAIAnalysis } = require('./aiAnalysis.js')
+const { getGoogleSheetsData } = require('./openAllianceSummary/googleSheetsData.js')
+const { generateAIAnalysis } = require('./openAllianceSummary/aiAnalysis.js')
 require('dotenv').config();
 
 // Initialize your app
@@ -15,7 +15,7 @@ const app = new App({
 });
 
 // Configuration - Replace with your actual channel ID
-const DAILY_REPORT_CHANNEL = 'C097CL157T7'; // Replace with your channel ID
+const DAILY_REPORT_CHANNEL = process.env.SLACK_DAILY_REPORT_CHANNEL; // Replace with your channel ID
 
 
 // Main function that makes both API calls and processes data
@@ -156,8 +156,7 @@ async function sendDailyReport() {
           text: `📋 *Google Sheets Summary*\n⚠️ Data temporarily unavailable`
         }
       });
-    }
-  *********************************************************************************/
+
     // Add AI Analysis section
     blocks.push({
       type: 'section',
@@ -166,6 +165,8 @@ async function sendDailyReport() {
         text: `🤖 *AI Analysis (${reportData.aiAnalysis.model})*\n${reportData.aiAnalysis.analysis}`
       }
     });
+
+
 
     // Add footer
     blocks.push(
@@ -182,6 +183,9 @@ async function sendDailyReport() {
         ]
       }
     );
+
+        }
+  *********************************************************************************/
 
     // Send the formatted message
     await app.client.chat.postMessage({

@@ -94,5 +94,4 @@ async function getGoogleSheetsData() {
   }
 }
 
-console.log(getGoogleSheetsData())
 module.exports = {getGoogleSheetsData};
