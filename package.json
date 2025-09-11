@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "A Slack bot that makes API calls and sends scheduled reports",
   "main": "bot.js",
+  "type": "module", 
   "scripts": {
     "start": "node bot.js",
     "dev": "nodemon bot.js"

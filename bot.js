@@ -1,10 +1,11 @@
-const { App } = require('@slack/bolt');
-const cron = require('node-cron');
-const axios = require('axios');
-const { OpenAI } = require('openai');
-const { getGoogleSheetsData } = require('./openAllianceSummary/googleSheetsData.js')
-const { generateAIAnalysis } = require('./openAllianceSummary/aiAnalysis.js')
-require('dotenv').config();
+import { App } from '@slack/bolt';
+import cron from 'node-cron';
+import axios from 'axios';
+import OpenAI from 'openai';
+import { getGoogleSheetsData } from './openAllianceSummary/googleSheetsData.js';
+import { generateAIAnalysis } from './openAllianceSummary/aiAnalysis.js';
+import dotenv from "dotenv"
+dotenv.config()
 
 // Initialize your app
 const app = new App({

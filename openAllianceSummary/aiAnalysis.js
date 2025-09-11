@@ -1,6 +1,6 @@
-const axios = require('axios');
-const { OpenAI } = require('openai');
-require('dotenv').config();
+import OpenAI from 'openai';
+import dotenv from "dotenv"
+dotenv.config()
 
 // Initialize OpenAI client
 const openai = new OpenAI({
