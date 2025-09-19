@@ -10,7 +10,7 @@ const openai = new OpenAI({
 
 
 // Function to generate AI analysis using OpenAI
-async function generateAIAnalysis(sheetsData) {
+export async function generateAIAnalysis(sheetsData) {
   try {
     console.log('---Generating AI analysis---');
     
@@ -39,7 +39,7 @@ You're reviewing Summaries of Chief Delphi Open Alliance threads where teams sha
 - Keep robot descriptions concise but technical
 - Include confidence levels (High/Medium/Low) for assessments
 - Include all links provided
-- Maximum 450 words for Slack readability:\n\n`;
+- Maximum 250 words for Slack readability:\n\n`;
     
     if (sheetsData) {
       prompt += `Total responses: ${sheetsData.totalResponses}\n`;
@@ -55,7 +55,7 @@ You're reviewing Summaries of Chief Delphi Open Alliance threads where teams sha
 
       });
       
-      prompt += "Please provide a brief analysis of trends, patterns, or insights from this data. Keep it concise and actionable for a First Robotics Team.";
+      prompt += "Please provide a brief analysis of trends, patterns, or insights from this data. Keep it around 250 words, concise and actionable for a First Robotics Team.";
     } else {
       prompt = "The data source is currently unavailable. Please provide a motivational message for a team's daily standup, focusing on Lebron James the Goat of basketball.";
     }
@@ -93,4 +93,3 @@ You're reviewing Summaries of Chief Delphi Open Alliance threads where teams sha
     };
   }
 }
-module.exports = {generateAIAnalysis};

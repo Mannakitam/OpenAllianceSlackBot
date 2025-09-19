@@ -3,7 +3,7 @@ import dotenv from "dotenv"
 dotenv.config()
 
 
-async function getGoogleSheetsData() {
+export async function getGoogleSheetsData() {
   try {
     console.log('---Fetching Google Sheets data---');
     const sheetId = process.env.SHEET_ID;
@@ -94,4 +94,3 @@ async function getGoogleSheetsData() {
   }
 }
 
-module.exports = {getGoogleSheetsData};

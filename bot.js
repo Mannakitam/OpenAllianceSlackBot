@@ -1,4 +1,6 @@
-import { App } from '@slack/bolt';
+import pkg from '@slack/bolt';
+const { App } = pkg;
+
 import cron from 'node-cron';
 import axios from 'axios';
 import OpenAI from 'openai';
@@ -107,57 +109,6 @@ async function sendDailyReport() {
     ];
 
 
-
-    /********************************************************************** 
-    // Add Google Sheets data section
-    if (reportData.sheetsData) {
-      // blocks.push({
-      //   type: 'section',
-      //   text: {
-      //     type: 'mrkdwn',
-      //     text: `📋 *Google Sheets Summary*\n` +
-      //           `Total Responses: ${reportData.sheetsData.totalResponses}\n` +
-      //           `Data Columns: ${reportData.sheetsData.headers.join(', ')}\n` +
-      //           `Recent Entries: ${reportData.sheetsData.recentEntries.length} latest records processed`
-      //   },
-      //   accessory: {
-      //     type: 'image',
-      //     image_url: 'https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=100&h=100&fit=crop&crop=center',
-      //     alt_text: 'data analysis'
-      //   }
-      // });
-
-      // Show recent entries summary
-      if (reportData.sheetsData.recentEntries.length > 0) {
-        const entrySummary = reportData.sheetsData.recentEntries
-          .slice(0, 3) // Show max 3 entries
-          .map((entry, index) => {
-            const entryText = Object.entries(entry)
-              .filter(([key, value]) => value && value.length > 0)
-              .slice(0, 2) // Show max 2 fields per entry
-              .map(([key, value]) => `${key}: ${value}`)
-              .join(' | ');
-            return `${index + 1}. ${entryText}`;
-          })
-          .join('\n');
-
-        blocks.push({
-          type: 'section',
-          text: {
-            type: 'mrkdwn',
-            text: `*Recent Entries:*\n\`\`\`${entrySummary}\`\`\``
-          }
-        });
-      }
-    } else {
-      blocks.push({
-        type: 'section',
-        text: {
-          type: 'mrkdwn',
-          text: `📋 *Google Sheets Summary*\n⚠️ Data temporarily unavailable`
-        }
-      });
-
     // Add AI Analysis section
     blocks.push({
       type: 'section',
@@ -179,14 +130,13 @@ async function sendDailyReport() {
         elements: [
           {
             type: 'mrkdwn',
-            text: '🤖 Automated report • Google Sheets + AI Analysis • Generated every day at 9:30 PM'
+            text: 'Automated report Generated every day at 9:30 PM'
           }
         ]
       }
     );
 
-        }
-  *********************************************************************************/
+
 
     // Send the formatted message
     await app.client.chat.postMessage({
@@ -211,27 +161,11 @@ async function sendDailyReport() {
 }
 
 // Schedule the daily report at 9:30 PM
-cron.schedule('26 19 * * *', async () => {
+cron.schedule('28 20 * * *', async () => {
   console.log('🕘 9:30 PM - Triggering daily report...');
   await sendDailyReport();
 }, {
   timezone: "America/New_York" // Change to your timezone
-});
-
-// Manual trigger for testing - respond to "test report" message
-app.message('test report', async ({ message, say }) => {
-  if (message.channel === DAILY_REPORT_CHANNEL) {
-    await say('🧪 Generating test report with Google Sheets + AI analysis...');
-    await sendDailyReport();
-  }
-});
-
-// Handle mentions
-app.event('app_mention', async ({ event, say }) => {
-  await say({
-    text: `Hi <@${event.user}>! 👋 I send automated daily reports at 9:30 PM using Google Sheets data and AI analysis. Say "test report" in <#${DAILY_REPORT_CHANNEL}> to trigger manually!`,
-    channel: event.channel
-  });
 });
 
 // Start the app
@@ -248,20 +182,7 @@ app.event('app_mention', async ({ event, say }) => {
     await app.client.chat.postMessage({
       token: process.env.SLACK_BOT_TOKEN,
       channel: DAILY_REPORT_CHANNEL,
-      text: '🤖 Data Analysis Bot is now online!',
-      // blocks: [
-      //   {
-      //     type: 'section',
-      //     text: {
-      //       type: 'mrkdwn',
-      //       text: '🤖 *Data Analysis Bot Started*\n' +
-      //             '✅ Google Sheets API connected\n' +
-      //             '✅ AI Analysis engine ready\n' +
-      //             '⏰ Next report: Today at 9:30 PM\n' +
-      //             '🧪 Type "test report" to trigger manually'
-      //     }
-      //   }
-      // ]
+      text: '🤖 Data Analysis Bot is now online!'
     });
     
   } catch (error) {
