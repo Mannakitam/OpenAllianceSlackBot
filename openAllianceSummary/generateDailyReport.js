@@ -4,8 +4,8 @@ const { App } = pkg;
 import cron from 'node-cron';
 import axios from 'axios';
 import OpenAI from 'openai';
-import { getGoogleSheetsData } from './openAllianceSummary/googleSheetsData.js';
-import { generateAIAnalysis } from './openAllianceSummary/aiAnalysis.js';
+import { getGoogleSheetsData } from './googleSheetsData.js';
+import { generateAIAnalysis } from './aiAnalysis.js';
 import dotenv from "dotenv"
 dotenv.config()
 
