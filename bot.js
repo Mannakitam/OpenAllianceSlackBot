@@ -4,8 +4,8 @@ const { App } = pkg;
 import cron from 'node-cron';
 import axios from 'axios';
 import OpenAI from 'openai';
-import { getGoogleSheetsData } from './openAllianceSummary/googleSheetsData.js';
-import { generateAIAnalysis } from './openAllianceSummary/aiAnalysis.js';
+
+import { generateDailyReport } from './openAllianceSummary/generateDailyReport.js'
 import dotenv from "dotenv"
 dotenv.config()
 
@@ -20,39 +20,6 @@ const app = new App({
 // Configuration - Replace with your actual channel ID
 const DAILY_REPORT_CHANNEL = process.env.SLACK_DAILY_REPORT_CHANNEL; // Replace with your channel ID
 
-
-// Main function that makes both API calls and processes data
-async function generateDailyReport() {
-  try {
-    console.log('---Starting daily report generation---');
-
-    // API Call 1: Get Google Sheets data
-    const sheetsData = await getGoogleSheetsData();
-    
-    // API Call 2: Generate AI analysis based on sheets data
-    const aiAnalysis = await generateAIAnalysis(sheetsData);
-
-    // Combine both API results
-    const report = {
-      timestamp: new Date().toLocaleString(),
-      sheetsData: sheetsData,
-      aiAnalysis: aiAnalysis,
-      status: 'success'
-    };
-
-    console.log('---Daily report data collected successfully---');
-    return report;
-
-  } catch (error) {
-    console.error('***Error generating daily report:', error.message);
-    
-    return {
-      timestamp: new Date().toLocaleString(),
-      status: 'error',
-      message: 'Unable to generate full report, but the bot is working!'
-    };
-  }
-}
 
 // Function to format and send the daily report
 async function sendDailyReport() {
@@ -174,9 +141,6 @@ cron.schedule('28 20 * * *', async () => {
     await app.start();
     console.log('⚡️ Google Sheets + AI Report Bot is running!');
     console.log(`📊 Daily reports will be sent to channel: ${DAILY_REPORT_CHANNEL}`);
-    console.log('⏰ Scheduled for 9:30 PM every day');
-    console.log('🧪 Type "test report" in the channel for manual testing');
-    console.log('📋 Data sources: Google Sheets API + OpenAI GPT-4o');
     
     // Send startup notification
     await app.client.chat.postMessage({
