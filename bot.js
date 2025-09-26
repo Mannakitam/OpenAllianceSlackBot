@@ -146,10 +146,39 @@ cron.schedule('28 20 * * *', async () => {
     await app.client.chat.postMessage({
       token: process.env.SLACK_BOT_TOKEN,
       channel: DAILY_REPORT_CHANNEL,
-      text: '🤖 Data Analysis Bot is now online!'
+      text: 'Data Analysis Bot is now online!'
     });
     
   } catch (error) {
     console.error('❌ Error starting the bot:', error);
   }
 })();
+
+// Respond to /report command
+app.command("/testreport", async ({ command, ack, client }) => {
+  await ack();
+
+  const dateInput = command.text.trim();
+
+  try {
+    const result = await client.chat.postMessage({
+      channel: command.channel_id,
+      text: `📅 Who is going to the meeting on *${dateInput}*? React with ✅ or ❌`,
+    });
+
+    // Add reactions
+    await client.reactions.add({ channel: result.channel, timestamp: result.ts, name: "white_check_mark" });
+    await client.reactions.add({ channel: result.channel, timestamp: result.ts, name: "x" });
+
+    // Save message info in memory or DB
+    meetings[result.ts] = {
+      channel: result.channel,
+      date: dateInput,
+    };
+  } catch (error) {
+    console.error(error);
+  }
+});
+
+// Simple in-memory storage (replace with DB for persistence)
+const meetings = {};
