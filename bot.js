@@ -2,8 +2,6 @@ import pkg from '@slack/bolt';
 const { App } = pkg;
 
 import cron from 'node-cron';
-import axios from 'axios';
-import OpenAI from 'openai';
 
 import fs from "fs";
 
@@ -133,10 +131,17 @@ async function sendDailyReport() {
 
 // Schedule the daily report at 9:30 PM
 cron.schedule('28 20 * * *', async () => {
-  console.log('🕘 9:30 PM - Triggering daily report...');
+  console.log('9:30 PM - Triggering daily report...');
   await sendDailyReport();
 }, {
   timezone: "America/New_York" // Change to your timezone
+});
+
+// message leads asking them for photos and videos, add to a Google drive folder
+cron.schedule('30 21 * * *', async() => {
+
+},{
+  timezone: "America/New_York" //timezone
 });
 
 // Start the app
@@ -299,4 +304,58 @@ app.command("/getreport", async ({ command, ack, client }) => {
   } catch (error) {
     console.error("Error getting report:", error);
   }
+});
+
+
+
+/*---------- LOTS OF TEST CODE ----------*/
+async function findConversation() {
+  try {
+    // Call the conversations.list method using the built-in WebClient
+    const result = await app.client.conversations.list({
+      // The token you used to initialize your app
+      token: process.env.SLACK_BOT_TOKEN
+    });
+
+    for (const channel of result.channels) {
+      console.log(channel.name)    
+    }
+  }
+  catch (error) {
+    console.error(error);
+  }
+}
+
+
+async function pm() {
+  const userId= ''; //some id // or any other user's ID
+  const messageText = "👋 Hello! This is a DM from the bot.";
+
+  try {
+    // 1️⃣ Open a DM channel with the user
+    const dm = await app.client.conversations.open({
+      users: userId,
+    });
+
+    const dmChannel = dm.channel.id;
+
+    // 2️⃣ Send a message to that DM channel
+    await app.client.chat.postMessage({
+      channel: dmChannel,
+      text: messageText,
+    });
+
+    console.log(`✅ Sent DM to ${userId}`);
+  } catch (error) {
+    console.error("Error sending DM:", error);
+  }
+}
+
+await pm()
+
+const result = await app.client.users.list();
+const users = result.members;
+
+users.forEach(u => {
+  console.log(u.id, u.name, u.real_name);
 });
