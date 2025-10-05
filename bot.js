@@ -5,9 +5,13 @@ import cron from 'node-cron';
 import axios from 'axios';
 import OpenAI from 'openai';
 
+import fs from "fs";
+
 import { generateDailyReport } from './openAllianceSummary/generateDailyReport.js'
 import dotenv from "dotenv"
 dotenv.config()
+
+const MEETINGS_FILE = "./meetings.json";
 
 // Initialize your app
 const app = new App({
@@ -154,31 +158,121 @@ cron.schedule('28 20 * * *', async () => {
   }
 })();
 
-// Respond to /report command
+
+// Utility: load JSON
+function loadMeetings() {
+  if (!fs.existsSync(MEETINGS_FILE)) return {};
+  const data = fs.readFileSync(MEETINGS_FILE, "utf-8");
+  try {
+    return JSON.parse(data);
+  } catch {
+    return {};
+  }
+}
+
+// Utility: save JSON
+function saveMeetings(meetings) {
+  fs.writeFileSync(MEETINGS_FILE, JSON.stringify(meetings, null, 2));
+}
+
+// 📝 Command to create poll
 app.command("/testreport", async ({ command, ack, client }) => {
   await ack();
 
   const dateInput = command.text.trim();
+  const channelId = command.channel_id;
 
   try {
+    // 1. Post poll message
     const result = await client.chat.postMessage({
-      channel: command.channel_id,
-      text: `📅 Who is going to the meeting on *${dateInput}*? React with ✅ or ❌`,
+      channel: channelId,
+      text: `Who is going to the meeting on *${dateInput}*? React with ✅ or ❌`,
     });
 
-    // Add reactions
+    // 2. Add reactions
     await client.reactions.add({ channel: result.channel, timestamp: result.ts, name: "white_check_mark" });
     await client.reactions.add({ channel: result.channel, timestamp: result.ts, name: "x" });
 
-    // Save message info in memory or DB
-    meetings[result.ts] = {
-      channel: result.channel,
+    // 3. Save poll to JSON
+    const meetings = loadMeetings();
+
+    if (!meetings[channelId]) {
+      meetings[channelId] = [];
+    }
+
+    meetings[channelId].push({
+      ts: result.ts,
       date: dateInput,
-    };
+    });
+
+    saveMeetings(meetings);
+    console.log("Meeting saved:", meetings);
+
+    await client.chat.postEphemeral({
+      channel: channelId,
+      user: command.user_id,
+      text: `Meeting poll created and saved for *${dateInput}*`,
+    });
+
   } catch (error) {
-    console.error(error);
+    console.error("Error posting testreport:", error);
   }
 });
 
-// Simple in-memory storage (replace with DB for persistence)
-const meetings = {};
+
+app.command("/getreport", async ({ command, ack, client }) => {
+  await ack();
+
+  const dateInput = command.text.trim();
+  const channelId = command.channel_id;
+
+  try {
+    const meetings = loadMeetings();
+    const channelMeetings = meetings[channelId] || [];
+
+    // Find poll by date
+    const meeting = channelMeetings.find(m => m.date === dateInput);
+
+    if (!meeting) {
+      await client.chat.postEphemeral({
+        channel: channelId,
+        user: command.user_id,
+        text: `No meeting poll found for *${dateInput}* in this channel.`,
+      });
+      return;
+    }
+
+    // Get bot's user ID so we can filter it out
+    const auth = await client.auth.test();
+    const botUserId = auth.user_id;
+
+    // Get reactions from the message
+    const response = await client.reactions.get({
+      channel: channelId,
+      timestamp: meeting.ts,
+    });
+
+    const reactions = response.message.reactions || [];
+    const yesReaction = reactions.find(r => r.name === "white_check_mark");
+    const noReaction = reactions.find(r => r.name === "x");
+
+    // Filter out the bot ID
+    const yesUsers = yesReaction
+      ? yesReaction.users.filter(u => u !== botUserId).map(u => `<@${u}>`)
+      : [];
+
+    const noUsers = noReaction
+      ? noReaction.users.filter(u => u !== botUserId).map(u => `<@${u}>`)
+      : [];
+
+    // Post results
+    await client.chat.postEphemeral({
+      channel: channelId,
+      user: command.user_id,
+      text: `*Meeting Report for ${meeting.date}*\n✅ Coming: ${yesUsers.length ? yesUsers.join(", ") : "None"}\n❌ Not coming: ${noUsers.length ? noUsers.join(", ") : "None"}`,
+    });
+
+  } catch (error) {
+    console.error("Error getting report:", error);
+  }
+});

@@ -9,3 +9,5 @@ dist
 dist-ssr
 *.local
 temp.json
+
+meetings.json
