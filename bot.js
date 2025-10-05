@@ -162,12 +162,8 @@ cron.schedule('28 20 * * *', async () => {
 // Utility: load JSON
 function loadMeetings() {
   if (!fs.existsSync(MEETINGS_FILE)) return {};
-  const data = fs.readFileSync(MEETINGS_FILE, "utf-8");
-  try {
-    return JSON.parse(data);
-  } catch {
-    return {};
-  }
+  const data = fs.readFileSync(MEETINGS_FILE);
+  return JSON.parse(data);
 }
 
 // Utility: save JSON
@@ -175,7 +171,10 @@ function saveMeetings(meetings) {
   fs.writeFileSync(MEETINGS_FILE, JSON.stringify(meetings, null, 2));
 }
 
-// 📝 Command to create poll
+
+/*---------------------------BOT COMMANDS---------------------------*/
+
+//Command to create poll
 app.command("/testreport", async ({ command, ack, client }) => {
   await ack();
 
@@ -183,6 +182,18 @@ app.command("/testreport", async ({ command, ack, client }) => {
   const channelId = command.channel_id;
 
   try {
+
+    //try to join channel if not in (so you dont have to invite every time)
+    try {
+      await client.conversations.join({ channel: channelId });
+      console.log(`Joined channel ${channelId}`);
+    } catch (joinError) {
+      if (joinError.data?.error !== "method_not_supported_for_channel_type") {
+        console.warn(`Could not auto-join channel ${channelId}:`, joinError.data?.error);
+      }
+    }
+
+
     // 1. Post poll message
     const result = await client.chat.postMessage({
       channel: channelId,
@@ -195,18 +206,14 @@ app.command("/testreport", async ({ command, ack, client }) => {
 
     // 3. Save poll to JSON
     const meetings = loadMeetings();
-
-    if (!meetings[channelId]) {
-      meetings[channelId] = [];
-    }
-
+    if (!meetings[channelId]) meetings[channelId] = [];
+    
     meetings[channelId].push({
       ts: result.ts,
       date: dateInput,
     });
-
     saveMeetings(meetings);
-    console.log("Meeting saved:", meetings);
+
 
     await client.chat.postEphemeral({
       channel: channelId,
@@ -230,23 +237,42 @@ app.command("/getreport", async ({ command, ack, client }) => {
     const meetings = loadMeetings();
     const channelMeetings = meetings[channelId] || [];
 
-    // Find poll by date
-    const meeting = channelMeetings.find(m => m.date === dateInput);
+    // 📝 No date provided → show available poll dates
+    if (!dateInput) {
+      if (channelMeetings.length === 0) {
+        await client.chat.postEphemeral({
+          channel: channelId,
+          user: command.user_id,
+          text: `There are no meeting polls saved in this channel.`,
+        });
+        return;
+      }
 
+      const datesList = channelMeetings.map(m => `• ${m.date}`).join("\n");
+
+      await client.chat.postEphemeral({
+        channel: channelId,
+        user: command.user_id,
+        text: `*Available meeting reports in this channel:*\n${datesList}\n\nRun \`/getreport <date>\` to view one.`,
+      });
+
+      return;
+    }
+
+    // 📊 Date provided → find that poll
+    const meeting = channelMeetings.find(m => m.date === dateInput);
     if (!meeting) {
       await client.chat.postEphemeral({
         channel: channelId,
         user: command.user_id,
-        text: `No meeting poll found for *${dateInput}* in this channel.`,
+        text: `❌ No meeting poll found for *${dateInput}* in this channel.`,
       });
       return;
     }
 
-    // Get bot's user ID so we can filter it out
     const auth = await client.auth.test();
     const botUserId = auth.user_id;
 
-    // Get reactions from the message
     const response = await client.reactions.get({
       channel: channelId,
       timestamp: meeting.ts,
@@ -256,7 +282,6 @@ app.command("/getreport", async ({ command, ack, client }) => {
     const yesReaction = reactions.find(r => r.name === "white_check_mark");
     const noReaction = reactions.find(r => r.name === "x");
 
-    // Filter out the bot ID
     const yesUsers = yesReaction
       ? yesReaction.users.filter(u => u !== botUserId).map(u => `<@${u}>`)
       : [];
@@ -265,10 +290,9 @@ app.command("/getreport", async ({ command, ack, client }) => {
       ? noReaction.users.filter(u => u !== botUserId).map(u => `<@${u}>`)
       : [];
 
-    // Post results
-    await client.chat.postEphemeral({
-      channel: channelId,
-      user: command.user_id,
+    client.chat.postEphemeral({
+        channel: channelId,
+        user: command.user_id,
       text: `*Meeting Report for ${meeting.date}*\n✅ Coming: ${yesUsers.length ? yesUsers.join(", ") : "None"}\n❌ Not coming: ${noUsers.length ? noUsers.join(", ") : "None"}`,
     });
 
