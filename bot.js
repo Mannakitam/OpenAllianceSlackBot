@@ -138,8 +138,8 @@ cron.schedule('28 20 * * *', async () => {
 });
 
 // message leads asking them for photos and videos, add to a Google drive folder
-cron.schedule('30 21 * * *', async() => {
-
+cron.schedule('17 00 * * *', async() => {
+  await pm(process.env.SLACK_USER_IDS, "Please add any photos or videos from todays meeting to <https://www.youtube.com/watch?v=dQw4w9WgXcQ| google drive>");
 },{
   timezone: "America/New_York" //timezone
 });
@@ -176,6 +176,30 @@ function saveMeetings(meetings) {
   fs.writeFileSync(MEETINGS_FILE, JSON.stringify(meetings, null, 2));
 }
 
+// Utility: send DM
+async function pm(ID, text) {
+  const userId= ID; //some id // or any other user's ID
+  const messageText = text;
+
+  try {
+    // 1️⃣ Open a DM channel with the user
+    const dm = await app.client.conversations.open({
+      users: userId,
+    });
+
+    const dmChannel = dm.channel.id;
+
+    // 2️⃣ Send a message to that DM channel
+    await app.client.chat.postMessage({
+      channel: dmChannel,
+      text: messageText,
+    });
+
+    console.log(`✅ Sent DM to ${userId}`);
+  } catch (error) {
+    console.error("Error sending DM:", error);
+  }
+}
 
 /*---------------------------BOT COMMANDS---------------------------*/
 
@@ -327,35 +351,10 @@ async function findConversation() {
 }
 
 
-async function pm() {
-  const userId= ''; //some id // or any other user's ID
-  const messageText = "👋 Hello! This is a DM from the bot.";
 
-  try {
-    // 1️⃣ Open a DM channel with the user
-    const dm = await app.client.conversations.open({
-      users: userId,
-    });
+// const result = await app.client.users.list();
+// const users = result.members;
 
-    const dmChannel = dm.channel.id;
-
-    // 2️⃣ Send a message to that DM channel
-    await app.client.chat.postMessage({
-      channel: dmChannel,
-      text: messageText,
-    });
-
-    console.log(`✅ Sent DM to ${userId}`);
-  } catch (error) {
-    console.error("Error sending DM:", error);
-  }
-}
-
-await pm()
-
-const result = await app.client.users.list();
-const users = result.members;
-
-users.forEach(u => {
-  console.log(u.id, u.name, u.real_name);
-});
+// users.forEach(u => {
+//   console.log(u.id, u.name, u.real_name);
+// });
