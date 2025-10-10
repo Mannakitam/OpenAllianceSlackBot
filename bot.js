@@ -10,6 +10,7 @@ import dotenv from "dotenv"
 dotenv.config()
 
 const MEETINGS_FILE = "./meetings.json";
+const LEADS_FILE = "./leads.json"
 
 // Initialize your app
 const app = new App({
@@ -130,19 +131,19 @@ async function sendDailyReport() {
 }
 
 // Schedule the daily report at 9:30 PM
-cron.schedule('28 20 * * *', async () => {
-  console.log('9:30 PM - Triggering daily report...');
-  await sendDailyReport();
-}, {
-  timezone: "America/New_York" // Change to your timezone
-});
+// cron.schedule('28 20 * * *', async () => {
+//   console.log('9:30 PM - Triggering daily report...');
+//   await sendDailyReport();
+// }, {
+//   timezone: "America/New_York" // Change to your timezone
+// });
 
-// message leads asking them for photos and videos, add to a Google drive folder
-cron.schedule('17 00 * * *', async() => {
-  await pm(process.env.SLACK_USER_IDS, "Please add any photos or videos from todays meeting to <https://www.youtube.com/watch?v=dQw4w9WgXcQ| google drive>");
-},{
-  timezone: "America/New_York" //timezone
-});
+// // message leads asking them for photos and videos, add to a Google drive folder
+// cron.schedule('17 00 * * *', async() => {
+//   await pm(process.env.SLACK_USER_IDS, `Please add any photos or videos from todays meeting to <${process.env.GOOGLE_DRIVE_LINK}| google drive>`);
+// },{
+//   timezone: "America/New_York" //timezone
+// });
 
 // Start the app
 (async () => {
@@ -152,11 +153,13 @@ cron.schedule('17 00 * * *', async() => {
     console.log(`📊 Daily reports will be sent to channel: ${DAILY_REPORT_CHANNEL}`);
     
     // Send startup notification
-    await app.client.chat.postMessage({
-      token: process.env.SLACK_BOT_TOKEN,
-      channel: DAILY_REPORT_CHANNEL,
-      text: 'Data Analysis Bot is now online!'
-    });
+
+    pm(process.env.SLACK_USER_IDS, "I have indeed been uploaded, sir. We're online and ready")
+    // await app.client.chat.postMessage({
+    //   token: process.env.SLACK_BOT_TOKEN,
+    //   channel: DAILY_REPORT_CHANNEL,
+    //   text: 'Data Analysis Bot is now online!'
+    // });
     
   } catch (error) {
     console.error('❌ Error starting the bot:', error);
@@ -174,6 +177,18 @@ function loadMeetings() {
 // Utility: save JSON
 function saveMeetings(meetings) {
   fs.writeFileSync(MEETINGS_FILE, JSON.stringify(meetings, null, 2));
+}
+
+// Utility: load JSON
+function loadLeads() {
+  if (!fs.existsSync(LEADS_FILE)) return {};
+  const data = fs.readFileSync(LEADS_FILE);
+  return JSON.parse(data);
+}
+
+// Utility: save JSON
+function saveLeads(leads) {
+  fs.writeFileSync(LEADS_FILE, JSON.stringify(leads, null, 2));
 }
 
 // Utility: send DM
@@ -204,7 +219,7 @@ async function pm(ID, text) {
 /*---------------------------BOT COMMANDS---------------------------*/
 
 //Command to create poll
-app.command("/testreport", async ({ command, ack, client }) => {
+app.command("/whoscoming", async ({ command, ack, client }) => {
   await ack();
 
   const dateInput = command.text.trim();
@@ -255,8 +270,23 @@ app.command("/testreport", async ({ command, ack, client }) => {
   }
 });
 
+app.command("/clearmeetings", async ({ command, ack, client }) => {
+  await ack();
+  
+  const channelId = command.channel_id;
 
-app.command("/getreport", async ({ command, ack, client }) => {
+  try {
+    const meetings = loadMeetings();
+    if (!meetings[channelId]) meetings[channelId] = [];
+    
+    meetings[channelId] = [];
+    saveMeetings(meetings);
+  } catch (error) {
+    console.error("Error clearing meetings:", error);
+  }
+});
+
+app.command("/meetingreport", async ({ command, ack, client }) => {
   await ack();
 
   const dateInput = command.text.trim();
@@ -330,6 +360,31 @@ app.command("/getreport", async ({ command, ack, client }) => {
   }
 });
 
+app.command("/addlead", async ({command, ack, client}) => {
+  await ack();
+
+  const userID = command.text.trim();
+  const channelId = command.channel_id;
+
+  try {
+    const leads = loadLeads();
+    if (!leads[channelId]) leads[channelId] = [];
+    
+    const result = await app.client.users.list();
+    const users = result.members;
+
+    users.forEach(u => {
+      if(userID == u.real_name) {
+        leads[channelId].push([u.id, u.real_name]);
+      }  
+    })
+
+    saveLeads(leads);
+  } catch (error) {
+    console.error("Error adding leads:", error);
+  }
+
+});
 
 
 /*---------- LOTS OF TEST CODE ----------*/
