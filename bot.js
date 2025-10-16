@@ -192,27 +192,42 @@ function saveLeads(leads) {
 }
 
 // Utility: send DM
-async function pm(ID, text) {
-  const userId= ID; //some id // or any other user's ID
+async function pm(IDs, text) {
+  const userIds = IDs.split(',').map(id => id.trim()); // Support multiple IDs separated by commas
   const messageText = text;
 
   try {
-    // 1️⃣ Open a DM channel with the user
-    const dm = await app.client.conversations.open({
-      users: userId,
-    });
+    // Get all users in the workspace
+    const result = await app.client.users.list();
+    const validUserIds = result.members.map(user => user.id);
 
-    const dmChannel = dm.channel.id;
+    for (const userId of userIds) {
+      if (!validUserIds.includes(userId)) {
+        console.warn(`⚠️ User ID ${userId} not found in the workspace. Skipping...`);
+        continue;
+      }
 
-    // 2️⃣ Send a message to that DM channel
-    await app.client.chat.postMessage({
-      channel: dmChannel,
-      text: messageText,
-    });
+      try {
+        // 1️⃣ Open a DM channel with the user
+        const dm = await app.client.conversations.open({
+          users: userId,
+        });
 
-    console.log(`✅ Sent DM to ${userId}`);
+        const dmChannel = dm.channel.id;
+
+        // 2️⃣ Send a message to that DM channel
+        await app.client.chat.postMessage({
+          channel: dmChannel,
+          text: messageText,
+        });
+
+        console.log(`✅ Sent DM to ${userId}`);
+      } catch (error) {
+        console.error(`Error sending DM to ${userId}:`, error);
+      }
+    }
   } catch (error) {
-    console.error("Error sending DM:", error);
+    console.error("❌ Error fetching user list:", error);
   }
 }
 
