@@ -162,7 +162,7 @@ async function sendDailyReport() {
     // });
     
   } catch (error) {
-    console.error('❌ Error starting the bot:', error);
+    console.error('Error starting the bot:', error);
   }
 })();
 
@@ -203,7 +203,7 @@ async function pm(IDs, text) {
 
     for (const userId of userIds) {
       if (!validUserIds.includes(userId)) {
-        console.warn(`⚠️ User ID ${userId} not found in the workspace. Skipping...`);
+        console.warn(`User ID ${userId} not found in the workspace. Skipping...`);
         continue;
       }
 
@@ -221,13 +221,13 @@ async function pm(IDs, text) {
           text: messageText,
         });
 
-        console.log(`✅ Sent DM to ${userId}`);
+        console.log(`Sent DM to ${userId}`);
       } catch (error) {
         console.error(`Error sending DM to ${userId}:`, error);
       }
     }
   } catch (error) {
-    console.error("❌ Error fetching user list:", error);
+    console.error("Error fetching user list:", error);
   }
 }
 
@@ -327,7 +327,7 @@ app.command("/meetingreport", async ({ command, ack, client }) => {
       await client.chat.postEphemeral({
         channel: channelId,
         user: command.user_id,
-        text: `*Available meeting reports in this channel:*\n${datesList}\n\nRun \`/getreport <date>\` to view one.`,
+        text: `*Available meeting reports in this channel:*\n${datesList}\n\nRun \`/meetingreport <date>\` to view one.`,
       });
 
       return;
