@@ -145,7 +145,9 @@ async function sendDailyReport() {
 //   timezone: "America/New_York" //timezone
 // });
 
+
 // Start the app
+
 (async () => {
   try {
     await app.start();
@@ -232,6 +234,14 @@ async function pm(IDs, text) {
 }
 
 /*---------------------------BOT COMMANDS---------------------------*/
+const commands = [
+  { name: "/whoscoming", desc: "Create a poll asking who's attending on that date." },
+  { name: "/meetingreport", desc: "Show poll results for the given date or list polls." },
+  { name: "/clearmmeetings", desc: "Clears all meeting for a channel" },
+  { name: "/latestmeeting", desc: "Shows latest meeting"},
+  { name: "/addlead", desc: "Adds a user as a lead"},
+  { name: "/help", desc: "Show this help menu." },
+];
 
 //Command to create poll
 app.command("/whoscoming", async ({ command, ack, client }) => {
@@ -375,6 +385,69 @@ app.command("/meetingreport", async ({ command, ack, client }) => {
   }
 });
 
+app.command("/latestmeeting", async ({ command, ack, client }) => {
+  await ack();
+
+  const channelId = command.channel_id;
+
+  try {
+    const meetings = loadMeetings();
+    const channelMeetings = meetings[channelId] || [];
+
+
+      let date = new Date(channelMeetings[0].date);;
+      let index = 0;
+      for(let i = 0; i < channelMeetings.length; i++) {
+        let nDate = new Date(channelMeetings[i].date);
+        if(nDate > date){
+          index = i;
+          date = nDate;
+        }
+      }
+
+
+    // 📊 Date provided → find that poll
+    const meeting = channelMeetings[index];
+    if (!meeting) {
+      await client.chat.postEphemeral({
+        channel: channelId,
+        user: command.user_id,
+        text: `❌ No meeting poll found for *${dateInput}* in this channel.`,
+      });
+      return;
+    }
+
+    const auth = await client.auth.test();
+    const botUserId = auth.user_id;
+
+    const response = await client.reactions.get({
+      channel: channelId,
+      timestamp: meeting.ts,
+    });
+
+    const reactions = response.message.reactions || [];
+    const yesReaction = reactions.find(r => r.name === "white_check_mark");
+    const noReaction = reactions.find(r => r.name === "x");
+
+    const yesUsers = yesReaction
+      ? yesReaction.users.filter(u => u !== botUserId).map(u => `<@${u}>`)
+      : [];
+
+    const noUsers = noReaction
+      ? noReaction.users.filter(u => u !== botUserId).map(u => `<@${u}>`)
+      : [];
+
+    client.chat.postEphemeral({
+        channel: channelId,
+        user: command.user_id,
+      text: `*Meeting Report for ${meeting.date}*\n✅ Coming: ${yesUsers.length ? yesUsers.join(", ") : "None"}\n❌ Not coming: ${noUsers.length ? noUsers.join(", ") : "None"}`,
+    });
+
+  } catch (error) {
+    console.error("Error getting report:", error);
+  }
+});
+
 app.command("/addlead", async ({command, ack, client}) => {
   await ack();
 
@@ -389,7 +462,7 @@ app.command("/addlead", async ({command, ack, client}) => {
     const users = result.members;
 
     users.forEach(u => {
-      if(userID == u.real_name) {
+      if(userID == u.profile?.email) {
         leads[channelId].push([u.id, u.real_name]);
       }  
     })
@@ -401,6 +474,16 @@ app.command("/addlead", async ({command, ack, client}) => {
 
 });
 
+app.command("/help", async ({ ack, command, client }) => {
+  await ack();
+  const helpText = commands.map(c => `• \`${c.name}\` — ${c.desc}`).join("\n");
+
+  await client.chat.postEphemeral({
+    channel: command.channel_id,
+    user: command.user_id,
+    text: `*Available Commands:*\n${helpText}`,
+  });
+});
 
 /*---------- LOTS OF TEST CODE ----------*/
 async function findConversation() {
@@ -426,5 +509,6 @@ async function findConversation() {
 // const users = result.members;
 
 // users.forEach(u => {
-//   console.log(u.id, u.name, u.real_name);
+//   const email = u.profile?.email || "No email available";
+//   console.log(`${u.id} | ${u.name} | ${u.real_name} | ${email}`);
 // });
