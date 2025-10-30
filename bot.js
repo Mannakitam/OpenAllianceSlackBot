@@ -452,6 +452,8 @@ app.command("/addlead", async ({command, ack, client}) => {
   await ack();
 
   const userID = command.text.trim();
+  console.log(userID)
+  
   const channelId = command.channel_id;
 
   try {
