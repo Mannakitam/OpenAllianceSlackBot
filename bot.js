@@ -262,35 +262,55 @@ app.command("/whoscoming", async ({ command, ack, client }) => {
       }
     }
 
-
-    // 1. Post poll message
-    const result = await client.chat.postMessage({
-      channel: channelId,
-      text: `Who is going to the meeting on *${dateInput}*? React with ✅ or ❌`,
-    });
-
-    // 2. Add reactions
-    await client.reactions.add({ channel: result.channel, timestamp: result.ts, name: "white_check_mark" });
-    await client.reactions.add({ channel: result.channel, timestamp: result.ts, name: "x" });
-
-    // 3. Save poll to JSON
     const meetings = loadMeetings();
+
+    // Ensure channel entry exists
     if (!meetings[channelId]) meetings[channelId] = [];
-    
-    meetings[channelId].push({
-      ts: result.ts,
-      date: dateInput,
-    });
-    saveMeetings(meetings);
+
+    const newDate = new Date(dateInput);
+
+    //Check for existing meeting with same date
+    const existingMeeting = meetings[channelId].find(
+      (m) => new Date(m.date).toDateString() === newDate.toDateString()
+    );
+
+    if (existingMeeting) {
+      await client.chat.postEphemeral({
+        channel: channelId,
+        user: command.user_id,
+        text: `A meeting poll already exists for *${dateInput}*`,
+      });
+      console.log(1)
+      return;
+    }
+      const showDate = new Date(dateInput).toDateString()
+      // 1. Post poll message
+      const result = await client.chat.postMessage({
+        channel: channelId,
+        text: `<!channel> Who is going to the meeting on *${showDate}*? React with ✅ or ❌`,
+      });
+
+      // 2. Add reactions
+      await client.reactions.add({ channel: result.channel, timestamp: result.ts, name: "white_check_mark" });
+      await client.reactions.add({ channel: result.channel, timestamp: result.ts, name: "x" });
+
+      // 3. Save poll to JSON
+      if (!meetings[channelId]) meetings[channelId] = [];
+      
+      meetings[channelId].push({
+        ts: result.ts,
+        date: dateInput,
+      });
+      saveMeetings(meetings);
 
 
-    await client.chat.postEphemeral({
-      channel: channelId,
-      user: command.user_id,
-      text: `Meeting poll created and saved for *${dateInput}*`,
-    });
-
-  } catch (error) {
+      await client.chat.postEphemeral({
+        channel: channelId,
+        user: command.user_id,
+        text: `Meeting poll created and saved for *${dateInput}*`,
+      });
+  }
+  catch (error) {
     console.error("Error posting testreport:", error);
   }
 });
@@ -453,22 +473,43 @@ app.command("/addlead", async ({command, ack, client}) => {
 
   const userID = command.text.trim();
   console.log(userID)
-  
+  // Match all user mentions — handles both "<@U12345>" and "<@U12345|username>"
+  const userMatches = userID.matchAll(/<@([A-Z0-9]+)(?:\|[^>]+)?>/gi);
+
+  // Convert to an array of user IDs
+  const mentionedUserIds = Array.from(userMatches, m => m[1]);
+  console.log(mentionedUserIds)
+
+  if (mentionedUserIds.length === 0) {
+    await client.chat.postEphemeral({
+      channel: command.channel_id,
+      user: command.user_id,
+      text: "Please mention at least one user like `/addlead @username`",
+    });
+  }
+
   const channelId = command.channel_id;
 
   try {
-    const leads = loadLeads();
-    if (!leads[channelId]) leads[channelId] = [];
     
+    const leads = loadLeads();
+
+    console.log("\n\n\n1\n\n\n")
+
     const result = await app.client.users.list();
     const users = result.members;
 
-    users.forEach(u => {
-      if(userID == u.profile?.email) {
-        leads[channelId].push([u.id, u.real_name]);
-      }  
-    })
+    for(let id of mentionedUserIds){
+      if (!leads[id]) leads[id] = [];
 
+      console.log(id + "\n")
+      console.log(leads)
+      users.forEach(u => {
+        if(id == u.id) {
+          leads[id].push([u.real_name]);
+        }  
+      })
+    }
     saveLeads(leads);
   } catch (error) {
     console.error("Error adding leads:", error);
