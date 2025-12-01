@@ -6,6 +6,7 @@ import cron from 'node-cron';
 import fs from "fs";
 
 import { generateDailyReport } from './openAllianceSummary/generateDailyReport.js'
+import { addMeeting, getMeeting, findDuplicateMeeting } from './database.js';
 import dotenv from "dotenv"
 dotenv.config()
 
@@ -244,76 +245,188 @@ const commands = [
 ];
 
 //Command to create poll
-app.command("/whoscoming", async ({ command, ack, client }) => {
+// app.command("/whoscoming", async ({ command, ack, client }) => {
+//   await ack();
+
+//   const dateInput = command.text.trim();
+//   const channelId = command.channel_id;
+
+//   try {
+
+//     //try to join channel if not in (so you dont have to invite every time)
+//     try {
+//       await client.conversations.join({ channel: channelId });
+//       console.log(`Joined channel ${channelId}`);
+//     } catch (joinError) {
+//       if (joinError.data?.error !== "method_not_supported_for_channel_type") {
+//         console.warn(`Could not auto-join channel ${channelId}:`, joinError.data?.error);
+//       }
+//     }
+
+//     const meetings = loadMeetings();
+
+//     // Ensure channel entry exists
+//     if (!meetings[channelId]) meetings[channelId] = [];
+
+//     const newDate = new Date(dateInput);
+
+//     //Check for existing meeting with same date
+//     const existingMeeting = meetings[channelId].find(
+//       (m) => new Date(m.date).toDateString() === newDate.toDateString()
+//     );
+
+//     if (existingMeeting) {
+//       await client.chat.postEphemeral({
+//         channel: channelId,
+//         user: command.user_id,
+//         text: `A meeting poll already exists for *${dateInput}*`,
+//       });
+//       console.log(1)
+//       return;
+//     }
+//       const showDate = new Date(dateInput).toDateString()
+//       // 1. Post poll message
+//       const result = await client.chat.postMessage({
+//         channel: channelId,
+//         text: `<!channel> Who is going to the meeting on *${showDate}*? React with ✅ or ❌`,
+//       });
+
+//       // 2. Add reactions
+//       await client.reactions.add({ channel: result.channel, timestamp: result.ts, name: "white_check_mark" });
+//       await client.reactions.add({ channel: result.channel, timestamp: result.ts, name: "x" });
+
+//       // 3. Save poll to JSON
+//       if (!meetings[channelId]) meetings[channelId] = [];
+      
+//       meetings[channelId].push({
+//         ts: result.ts,
+//         date: dateInput,
+//       });
+//       saveMeetings(meetings);
+
+
+//       await client.chat.postEphemeral({
+//         channel: channelId,
+//         user: command.user_id,
+//         text: `Meeting poll created and saved for *${dateInput}*`,
+//       });
+//   }
+//   catch (error) {
+//     console.error("Error posting testreport:", error);
+//   }
+// });
+
+app.command("/whoscoming", async ({ ack, body, client }) => {
   await ack();
 
-  const dateInput = command.text.trim();
-  const channelId = command.channel_id;
+  const channelId = body.channel_id;
 
   try {
+    await client.views.open({
+      trigger_id: body.trigger_id,
+      view: {
+        type: "modal",
+        callback_id: "whoscoming_modal",
+        private_metadata: channelId,
+        title: { type: "plain_text", text: "Meeting Poll" },
+        submit: { type: "plain_text", text: "Create" },
+        close: { type: "plain_text", text: "Cancel" },
+        blocks: [
+          {
+            type: "input",
+            block_id: "date_block",
+            label: { type: "plain_text", text: "Select meeting date" },
+            element: {
+              type: "datepicker",
+              action_id: "meeting_date",
+              placeholder: { type: "plain_text", text: "Pick a date" }
+            }
+          },
+          // {
+          //   type: "input",
+          //   block_id: "channel_block",
+          //   optional: true,
+          //   label: { type: "plain_text", text: "Choose channel (optional)" },
+          //   element: {
+          //     type: "conversations_select",
+          //     action_id: "poll_channel",
+          //     default_to_current_conversation: true
+          //   }
+          // }
+        ]
+      }
+    });
+  } catch (err) {
+    console.error("Error opening modal:", err);
+  }
+});
 
-    //try to join channel if not in (so you dont have to invite every time)
+app.view("whoscoming_modal", async ({ ack, body, view, client }) => {
+  await ack();
+
+
+  const dateInput = view.state.values.date_block.meeting_date.selected_date;
+
+  const channelId = body.view.private_metadata;
+
+  try {
+    // Attempt to join channel
     try {
       await client.conversations.join({ channel: channelId });
-      console.log(`Joined channel ${channelId}`);
-    } catch (joinError) {
-      if (joinError.data?.error !== "method_not_supported_for_channel_type") {
-        console.warn(`Could not auto-join channel ${channelId}:`, joinError.data?.error);
+    } catch (err) {
+      if (err.data?.error !== "method_not_supported_for_channel_type") {
+        console.warn(`Could not join channel ${channelId}: ${err.data?.error}`);
       }
     }
 
-    const meetings = loadMeetings();
 
-    // Ensure channel entry exists
-    if (!meetings[channelId]) meetings[channelId] = [];
 
-    const newDate = new Date(dateInput);
+    // Prevent duplicates
+    const alreadyExists = findDuplicateMeeting(channelId, dateInput);
 
-    //Check for existing meeting with same date
-    const existingMeeting = meetings[channelId].find(
-      (m) => new Date(m.date).toDateString() === newDate.toDateString()
-    );
-
-    if (existingMeeting) {
-      await client.chat.postEphemeral({
-        channel: channelId,
-        user: command.user_id,
-        text: `A meeting poll already exists for *${dateInput}*`,
+    if (alreadyExists) {
+      await client.chat.postMessage({
+        channel: body.user.id,
+        text: `A meeting poll for *${new Date(dateInput).toDateString()}* already exists in <#${channelId}>.`
       });
-      console.log(1)
       return;
     }
-      const showDate = new Date(dateInput).toDateString()
-      // 1. Post poll message
-      const result = await client.chat.postMessage({
-        channel: channelId,
-        text: `<!channel> Who is going to the meeting on *${showDate}*? React with ✅ or ❌`,
-      });
 
-      // 2. Add reactions
-      await client.reactions.add({ channel: result.channel, timestamp: result.ts, name: "white_check_mark" });
-      await client.reactions.add({ channel: result.channel, timestamp: result.ts, name: "x" });
+    // Post the poll
+    const pollMsg = await client.chat.postMessage({
+      channel: channelId,
+      text: `<!channel> Who is going to the meeting on *${new Date(dateInput).toDateString()}*?\nReact with:  ✅ yes   ❌ no`,
+    });
 
-      // 3. Save poll to JSON
-      if (!meetings[channelId]) meetings[channelId] = [];
-      
-      meetings[channelId].push({
-        ts: result.ts,
-        date: dateInput,
-      });
-      saveMeetings(meetings);
+    // Add reactions
+    await client.reactions.add({
+      channel: channelId,
+      timestamp: pollMsg.ts,
+      name: "white_check_mark"
+    });
 
+    await client.reactions.add({
+      channel: channelId,
+      timestamp: pollMsg.ts,
+      name: "x"
+    });
 
-      await client.chat.postEphemeral({
-        channel: channelId,
-        user: command.user_id,
-        text: `Meeting poll created and saved for *${dateInput}*`,
-      });
-  }
-  catch (error) {
-    console.error("Error posting testreport:", error);
+    // Save poll to JSON
+    addMeeting(channelId, pollMsg.ts, dateInput);
+
+    //saveMeetings(meetings);
+
+    // DM user confirmation
+    await client.chat.postMessage({
+      channel: body.user.id,
+      text: `Poll created for *${dateInput}*\nPosted in <#${channelId}>`
+    });
+
+  } catch (error) {
+    console.error("Error creating poll:", error);
   }
 });
+
 
 app.command("/clearmeetings", async ({ command, ack, client }) => {
   await ack();

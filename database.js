@@ -33,13 +33,19 @@ pool.getConnection((err, connection) => {
   }
 })
 
-async function addData(id, ts, dt) {
+export async function addMeeting(id, ts, dt) {
     await pool.query(`
     INSERT INTO meetings (channelID, ts, date)
     VALUES (?, ?, ?)    
-    `, [id, ts, sqlDate(dt)])   
+    `, [id, ts, dt])   
 }
 
+export async function getMeeting(id, ts, dt) {
+  const hi = await pool.query(`
+  SELECT date FROM meetings WHERE channelID = (?)
+  `, [id])
+  return hi[0]
+}
 function sqlDate(dateStr) {
   // expects "MM/DD/YYYY"
   const [month, day, year] = dateStr.split('/');
@@ -50,6 +56,33 @@ function sqlDate(dateStr) {
 
   return `${year}-${mm}-${dd}`;
 }
+const c = "C09LX4QM21K"
+const t = 1760656501.229439
+
+console.log(await findDuplicateMeeting(c, "11/21/2031"))
+
+export async function findDuplicateMeeting(channel, date) {
+  const meetings = await getMeeting(channel) || [];
+
+  const inputDate = (typeof date === "string" && date.length >= 10)
+    ? date.slice(0, 10)
+    : new Date(date).toISOString().slice(0, 10);
+
+  for (const m of meetings) {
+    if (!m?.date) continue;
+    const mDate = (typeof m.date === "string" && m.date.length >= 10)
+      ? m.date.slice(0, 10)
+      : new Date(m.date).toISOString().slice(0, 10);
+
+    if (mDate === inputDate) {
+      console.log("true");
+      return true;
+    }
+  }
+
+  console.log("false");
+  return false;
+}
 
 
-export default pool
+//export default pool
