@@ -33,6 +33,23 @@ pool.getConnection((err, connection) => {
     }
 })
 
+export async function saveMessage(channelID, userID, text, ts, thread_ts, edited_ts, attachments){
+    await pool.query (`
+        INSERT INTO messageHistory (channel, user, text, ts, thread_ts, edited_ts, attachments)
+        VALUES (?, ?, ?, ?, ?, ?, ?)`, 
+        [channelID, userID, text, ts, thread_ts, edited_ts, attachments]
+    )
+}
+
+export async function updateMessage(text, edited_ts, attachments, thread_ts, ts, channelID, user){
+    await pool.query(`
+        UPDATE messageHistory
+        SET text = ?, edited_ts = ?, attachments = ?, thread_ts = ?, user = ?
+        WHERE ts = ? AND channel = ?`,
+        [text, edited_ts, attachments, thread_ts, user, ts, channelID]
+    );
+}
+
 export async function addMeeting(id, ts, dt) {
     await pool.query(`
         INSERT INTO meetings (channelID, ts, date)
@@ -102,5 +119,3 @@ export async function findDuplicateMeeting(channel, date) {
     return false;
 }
 
-
-//export default pool

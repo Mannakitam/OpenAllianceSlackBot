@@ -6,7 +6,7 @@ import cron from 'node-cron';
 import fs from "fs";
 
 import { generateDailyReport } from './openAllianceSummary/generateDailyReport.js'
-import { addMeeting, getMeetingWithTS, findDuplicateMeeting, addUser, getUsers } from './database.js';
+import { addMeeting, getMeetingWithTS, findDuplicateMeeting, addUser, getUsers, saveMessage, updateMessage } from './database.js';
 import dotenv from "dotenv"
 dotenv.config()
 
@@ -24,7 +24,6 @@ const DAILY_REPORT_CHANNEL = process.env.SLACK_DAILY_REPORT_CHANNEL;
 
 
 // Start the app
-
 (async () => {
     try {
         await app.start();
@@ -44,6 +43,72 @@ const DAILY_REPORT_CHANNEL = process.env.SLACK_DAILY_REPORT_CHANNEL;
         console.error('Error starting the bot:', error);
     }
 })();
+
+//message logger
+app.event("message", async ({ event, client, logger }) => {
+    try {
+
+        const channelID   =   event.channel;
+        const userID      =   event.user || event.bot_id || "unknown_bot";
+        const text        =   event.text || "";
+        const ts          =   event.ts;
+        const thread_ts   =   event.thread_ts || null;
+        const edited_ts   =   event.edited?.ts || null;
+        
+        const attachmentsJSON = {};
+        if (event.attachments) attachmentsJSON.attachments = event.attachments;
+        if (event.blocks) attachmentsJSON.blocks = event.blocks;
+
+        const attachmentsString = Object.keys(attachmentsJSON).length
+        ? JSON.stringify(attachmentsJSON)
+        : null;
+
+
+        console.log(`New message in ${channelID} from ${userID}: ${text}`);
+
+        // Save to database
+        await saveMessage(channelID, userID, text, ts, thread_ts, edited_ts, attachmentsString);
+
+        console.log(`Message saved to DB: ${ts}`);
+
+    } catch (error) {
+        console.error("Error handling message event:", error);
+    }
+});
+
+app.event("message", async ({ event, logger }) => {
+  try {
+    // Only handle edits
+    if (event.subtype !== "message_changed") return;
+
+    const editedMessage = event.message;  
+
+    const channelID     =   event.channel;      
+    const userID        =   event.user || event.bot_id || "unknown_bot";
+    const text          =   editedMessage.text || "";
+    const ts            =   editedMessage.ts;          
+    const thread_ts     =   editedMessage.thread_ts || null;
+    const edited_ts     =   editedMessage.edited?.ts || null;
+
+    // Correctly get attachments and blocks from the inner message
+    const attachmentsJSON = {};
+    if (editedMessage.attachments) attachmentsJSON.attachments = editedMessage.attachments;
+    if (editedMessage.blocks) attachmentsJSON.blocks = editedMessage.blocks;
+
+    const attachmentsString = Object.keys(attachmentsJSON).length
+      ? JSON.stringify(attachmentsJSON)
+      : null;
+
+    // Update the database
+    await updateMessage(text, edited_ts, attachmentsString, thread_ts, ts, channelID, userID);
+
+    console.log(`Message updated in DB: ${ts}`);
+
+  } catch (error) {
+    console.error("Error handling edited message:", error);
+  }
+});
+
 
 
 // Utility: send DM
