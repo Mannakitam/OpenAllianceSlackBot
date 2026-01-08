@@ -421,7 +421,7 @@ app.view("addMember_modal", async ({ack, body, view, client}) => {
     }
 });
 
-app.command("/test", async ({ack, command, client }) => {
+app.command("/pingsubteam", async ({ack, command, client }) => {
     await ack();
 
     const message     =    command.text.trim();
