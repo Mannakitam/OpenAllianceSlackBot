@@ -6,12 +6,9 @@ import cron from 'node-cron';
 import fs from "fs";
 
 import { generateDailyReport } from './openAllianceSummary/generateDailyReport.js'
-import { addMeeting, getMeetingWithTS, findDuplicateMeeting, addUser } from './database.js';
+import { addMeeting, getMeetingWithTS, findDuplicateMeeting, addUser, getUsers } from './database.js';
 import dotenv from "dotenv"
 dotenv.config()
-
-const MEETINGS_FILE = "./meetings.json";
-const LEADS_FILE = "./leads.json"
 
 // Initialize your app
 const app = new App({
@@ -48,30 +45,6 @@ const DAILY_REPORT_CHANNEL = process.env.SLACK_DAILY_REPORT_CHANNEL;
     }
 })();
 
-
-// Utility: load JSON
-function loadMeetings() {
-    if (!fs.existsSync(MEETINGS_FILE)) return {};
-    const data = fs.readFileSync(MEETINGS_FILE);
-    return JSON.parse(data);
-}
-
-// Utility: save JSON
-function saveMeetings(meetings) {
-    fs.writeFileSync(MEETINGS_FILE, JSON.stringify(meetings, null, 2));
-}
-
-// Utility: load JSON
-function loadLeads() {
-    if (!fs.existsSync(LEADS_FILE)) return {};
-    const data = fs.readFileSync(LEADS_FILE);
-    return JSON.parse(data);
-}
-
-// Utility: save JSON
-function saveLeads(leads) {
-    fs.writeFileSync(LEADS_FILE, JSON.stringify(leads, null, 2));
-}
 
 // Utility: send DM
 async function pm(IDs, text) {
@@ -376,8 +349,7 @@ app.view("meetingreport_modal", async ({ ack, body, view, client }) => {
     });
 });
 
-
-app.command("/test", async ({ ack, command, client }) => {
+app.command("/addmember", async ({ ack, command, client }) => {
     await ack();
 
     await client.views.open({
@@ -446,6 +418,62 @@ app.view("addMember_modal", async ({ack, body, view, client}) => {
         } catch(error) {
         console.error("***\n\nError creating adding member:", error, "\n\n***");
         }
+    }
+});
+
+app.command("/test", async ({ack, command, client }) => {
+    await ack();
+
+    const message     =    command.text.trim();
+    const channelID   =    command.channel_id;
+    const sender      =    command.user_id;
+    const subteam     =    await getUsers(channelID);
+    
+    console.log("****\n\n\n", message, "\n", channelID, "\n", sender, "\n", subteam, "\n", "\n\n\n****")
+    try {
+        for (const userID of subteam){
+            const userID = userObj.userID;
+
+            //Invite the user if they're not in the channel
+            try {
+                await client.conversations.invite({
+                channel: channelID,
+                users: userID
+                });
+            } catch (err) {
+                if (err.data?.error !== "already_in_channel") {
+                    console.error(`Error inviting user ${userID}:`, err.data?.error);
+                    continue; // skip this user if invite fails
+                }
+            }
+
+            //send ping to each user induvidually
+            try {
+                await client.chat.postEphemeral({
+                    channel: channelID,
+                    user: userID.userID, // modal owner
+                    text: `<@${userID.userID}>`,
+                });
+            } catch (error) {
+                console.error("***\n\nError pinging member:", error, "\n\n***");
+            }
+        }
+
+        const res = await client.users.info({ user: sender });
+        const user = res.user;
+        const displayName = user.profile.display_name || user.real_name || "Unknown User";
+        const avatarUrl = user.profile.image_192 || user.profile.image_72;
+
+        await client.chat.postMessage({
+                    channel: channelID,
+                    text: message,
+                    username: displayName,
+                    icon_url: avatarUrl
+        });
+
+
+    } catch(error) {
+       console.error("Error pinging subteam:", error);
     }
 });
 

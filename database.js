@@ -47,6 +47,13 @@ export async function addUser(cID, uID) {
         `, [cID, uID])
 }
 
+export async function getUsers(id) {
+    const hi = await pool.query(`
+        SELECT userID FROM users WHERE channelID = (?)
+        `, [id])
+    return hi[0]
+}
+
 export async function getMeeting(id, ts, dt) {
     const hi = await pool.query(`
         SELECT date FROM meetings WHERE channelID = (?)
