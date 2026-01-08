@@ -6,7 +6,7 @@ import cron from 'node-cron';
 import fs from "fs";
 
 import { generateDailyReport } from './openAllianceSummary/generateDailyReport.js'
-import { addMeeting, getMeetingWithTS, findDuplicateMeeting } from './database.js';
+import { addMeeting, getMeetingWithTS, findDuplicateMeeting, addUser } from './database.js';
 import dotenv from "dotenv"
 dotenv.config()
 
@@ -151,8 +151,10 @@ function formatSlackDateToDateString(dateStr) {
     const commands = [
         { name: "/whoscoming", desc: "Create a poll asking who's attending on that date." },
         { name: "/meetingreport", desc: "Show poll results for the given date or list polls." },
+        /*
         { name: "/clearmmeetings", desc: "Clears all meeting for a channel" },
         { name: "/latestmeeting", desc: "Shows latest meeting"},
+        */
         { name: "/addlead", desc: "Adds a user as a lead"},
         { name: "/help", desc: "Show this help menu." },
     ];
@@ -217,7 +219,7 @@ app.view("whoscoming_modal", async ({ ack, body, view, client }) => {
 
 
     const dateInput = view.state.values.date_block.meeting_date.selected_date;
-    console.log("*****************************************************************\n\n\n", dateInput, "\n\n\n*****************************************************************")
+    //console.log("*****************************************************************\n\n\n", dateInput, "\n\n\n*****************************************************************")
     const channelId = body.view.private_metadata;
     const safeDate = formatSlackDateToDateString(dateInput);
 
@@ -271,7 +273,7 @@ app.view("whoscoming_modal", async ({ ack, body, view, client }) => {
     }
 });
 
-app.command("/test", async ({ command, ack, client }) => {
+app.command("/meetingreport", async ({ command, ack, client }) => {
     await ack();
 
     const channelId = command.channel_id;
@@ -324,7 +326,6 @@ app.command("/test", async ({ command, ack, client }) => {
     });
 });
 
-
 app.view("meetingreport_modal", async ({ ack, body, view, client }) => {
     await ack();
 
@@ -376,116 +377,76 @@ app.view("meetingreport_modal", async ({ ack, body, view, client }) => {
 });
 
 
-app.command("/latestmeeting", async ({ command, ack, client }) => {
+app.command("/test", async ({ ack, command, client }) => {
     await ack();
 
-    const channelId = command.channel_id;
-
-    try {
-        const meetings = loadMeetings();
-        const channelMeetings = meetings[channelId] || [];
-
-
-        let date = new Date(channelMeetings[0].date);;
-        let index = 0;
-        for(let i = 0; i < channelMeetings.length; i++) {
-            let nDate = new Date(channelMeetings[i].date);
-            if(nDate > date){
-                index = i;
-                date = nDate;
+    await client.views.open({
+        trigger_id: command.trigger_id,
+        view: {
+            type: "modal",
+            private_metadata: command.user_id,
+            callback_id: "addMember_modal",
+            title: { type: "plain_text", text: "Pick a User" },
+            submit: { type: "plain_text", text: "Select" },
+            close: { type: "plain_text", text: "Cancel" },
+            blocks: [
+            {
+                type: "input",
+                block_id: "users_block",
+                label: { type: "plain_text", text: "Choose a user" },
+                element: {
+                    type: "multi_users_select",
+                    action_id: "selected_users",
+                    placeholder: {
+                        type: "plain_text",
+                        text: "Search for a user",
+                    },
+                },
+            },
+            {
+                type: "input",
+                block_id: "channel_block",
+                label: { type: "plain_text", text: "Choose channel (channels start with #)" },
+                element: {
+                    type: "conversations_select",
+                    action_id: "poll_channel",
+                    default_to_current_conversation: true
+                }
             }
-        }
-
-
-        // 📊 Date provided → find that poll
-        const meeting = channelMeetings[index];
-        if (!meeting) {
-            await client.chat.postEphemeral({
-                channel: channelId,
-                user: command.user_id,
-                text: `❌ No meeting poll found for *${dateInput}* in this channel.`,
-            });
-            return;
-        }
-
-        const auth = await client.auth.test();
-        const botUserId = auth.user_id;
-
-        const response = await client.reactions.get({
-            channel: channelId,
-            timestamp: meeting.ts,
-        });
-
-        const reactions = response.message.reactions || [];
-        const yesReaction = reactions.find(r => r.name === "white_check_mark");
-        const noReaction = reactions.find(r => r.name === "x");
-
-        const yesUsers = yesReaction
-            ? yesReaction.users.filter(u => u !== botUserId).map(u => `<@${u}>`)
-            : [];
-
-        const noUsers = noReaction
-            ? noReaction.users.filter(u => u !== botUserId).map(u => `<@${u}>`)
-            : [];
-
-        client.chat.postEphemeral({
-            channel: channelId,
-            user: command.user_id,
-            text: `*Meeting Report for ${meeting.date}*\n✅ Coming: ${yesUsers.length ? yesUsers.join(", ") : "None"}\n❌ Not coming: ${noUsers.length ? noUsers.join(", ") : "None"}`,
-        });
-
-    } catch (error) {
-        console.error("Error getting report:", error);
-    }
+            ],
+        },
+    });
 });
 
-app.command("/addlead", async ({command, ack, client}) => {
+app.view("addMember_modal", async ({ack, body, view, client}) => {
     await ack();
 
-    const userID = command.text.trim();
-    console.log(userID)
-    // Match all user mentions — handles both "<@U12345>" and "<@U12345|username>"
-    const userMatches = userID.matchAll(/<@([A-Z0-9]+)(?:\|[^>]+)?>/gi);
+    const userId = view.state.values.users_block.selected_users.selected_users;
 
-    // Convert to an array of user IDs
-    const mentionedUserIds = Array.from(userMatches, m => m[1]);
-    console.log(mentionedUserIds)
+    const channelID = view.state.values.channel_block.poll_channel.selected_conversation;
 
-    if (mentionedUserIds.length === 0) {
-        await client.chat.postEphemeral({
-            channel: command.channel_id,
-            user: command.user_id,
-            text: "Please mention at least one user like `/addlead @username`",
-        });
-    }
+    //console.log("****\n\n\n", channelID, "\n", userId, "\n\n\n****")
 
-    const channelId = command.channel_id;
+    for (const uId of userId){
+        
+        try {
+            // Add the user to your system
+            await addUser(channelID, uId);
 
-    try {
-
-        const leads = loadLeads();
-
-        console.log("\n\n\n1\n\n\n")
-
-        const result = await app.client.users.list();
-        const users = result.members;
-
-        for(let id of mentionedUserIds){
-            if (!leads[id]) leads[id] = [];
-
-            console.log(id + "\n")
-            console.log(leads)
-            users.forEach(u => {
-                if(id == u.id) {
-                    leads[id].push([u.real_name]);
-                }  
-            })
+            // Send confirmation to the person who submitted the modal
+            try {
+                await client.chat.postEphemeral({
+                    channel: channelID,
+                    user: body.view.private_metadata, // modal owner
+                    text: `<@${uId}> has been added as a member of <#${channelID}>`,
+                });
+            } catch (error) {
+                console.error("***\n\nError posting the creation of a new member:", error, "\n\n***");
+            }
+        } catch(error) {
+        console.error("***\n\nError creating adding member:", error, "\n\n***");
         }
-        saveLeads(leads);
-    } catch (error) {
-        console.error("Error adding leads:", error);
     }
-
 });
 
 app.command("/help", async ({ ack, command, client }) => {

@@ -323,3 +323,115 @@ app.command("/meetingreport", async ({ command, ack, client }) => {
 });
 
 
+app.command("/latestmeeting", async ({ command, ack, client }) => {
+    await ack();
+
+    const channelId = command.channel_id;
+
+    try {
+        const meetings = loadMeetings();
+        const channelMeetings = meetings[channelId] || [];
+
+
+        let date = new Date(channelMeetings[0].date);;
+        let index = 0;
+        for(let i = 0; i < channelMeetings.length; i++) {
+            let nDate = new Date(channelMeetings[i].date);
+            if(nDate > date){
+                index = i;
+                date = nDate;
+            }
+        }
+
+
+        // 📊 Date provided → find that poll
+        const meeting = channelMeetings[index];
+        if (!meeting) {
+            await client.chat.postEphemeral({
+                channel: channelId,
+                user: command.user_id,
+                text: `❌ No meeting poll found for *${dateInput}* in this channel.`,
+            });
+            return;
+        }
+
+        const auth = await client.auth.test();
+        const botUserId = auth.user_id;
+
+        const response = await client.reactions.get({
+            channel: channelId,
+            timestamp: meeting.ts,
+        });
+
+        const reactions = response.message.reactions || [];
+        const yesReaction = reactions.find(r => r.name === "white_check_mark");
+        const noReaction = reactions.find(r => r.name === "x");
+
+        const yesUsers = yesReaction
+            ? yesReaction.users.filter(u => u !== botUserId).map(u => `<@${u}>`)
+            : [];
+
+        const noUsers = noReaction
+            ? noReaction.users.filter(u => u !== botUserId).map(u => `<@${u}>`)
+            : [];
+
+        client.chat.postEphemeral({
+            channel: channelId,
+            user: command.user_id,
+            text: `*Meeting Report for ${meeting.date}*\n✅ Coming: ${yesUsers.length ? yesUsers.join(", ") : "None"}\n❌ Not coming: ${noUsers.length ? noUsers.join(", ") : "None"}`,
+        });
+
+    } catch (error) {
+        console.error("Error getting report:", error);
+    }
+});
+
+app.command("/addlead", async ({command, ack, client}) => {
+    await ack();
+
+    const userID = command.text.trim();
+    console.log(userID)
+    // Match all user mentions — handles both "<@U12345>" and "<@U12345|username>"
+    const userMatches = userID.matchAll(/<@([A-Z0-9]+)(?:\|[^>]+)?>/gi);
+
+    // Convert to an array of user IDs
+    const mentionedUserIds = Array.from(userMatches, m => m[1]);
+    console.log(mentionedUserIds)
+
+    if (mentionedUserIds.length === 0) {
+        await client.chat.postEphemeral({
+            channel: command.channel_id,
+            user: command.user_id,
+            text: "Please mention at least one user like `/addlead @username`",
+        });
+    }
+
+    const channelId = command.channel_id;
+
+    try {
+
+        const leads = loadLeads();
+
+        console.log("\n\n\n1\n\n\n")
+
+        const result = await app.client.users.list();
+        const users = result.members;
+
+        for(let id of mentionedUserIds){
+            if (!leads[id]) leads[id] = [];
+
+            console.log(id + "\n")
+            console.log(leads)
+            users.forEach(u => {
+                if(id == u.id) {
+                    leads[id].push([u.real_name]);
+                }  
+            })
+        }
+        saveLeads(leads);
+    } catch (error) {
+        console.error("Error adding leads:", error);
+    }
+
+});
+

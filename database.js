@@ -40,6 +40,13 @@ export async function addMeeting(id, ts, dt) {
         `, [id, ts, dt])   
 }
 
+export async function addUser(cID, uID) {
+    await pool.query(`
+        INSERT INTO users (channelID, userID)
+        VALUES (?, ?)
+        `, [cID, uID])
+}
+
 export async function getMeeting(id, ts, dt) {
     const hi = await pool.query(`
         SELECT date FROM meetings WHERE channelID = (?)
