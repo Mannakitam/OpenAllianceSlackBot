@@ -234,6 +234,40 @@ async function pm(IDs, text) {
     }
 }
 
+// Utility: formate a date
+function formatSlackDateToDateString(dateStr) {
+  // dateStr: "YYYY-MM-DD"
+  const [year, month, day] = dateStr.split("-").map(Number);
+
+  const weekdays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const months   = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+  // Zeller’s congruence (Gregorian calendar)
+  let y = year;
+  let m = month;
+  if (m < 3) {
+    m += 12;
+    y -= 1;
+  }
+
+  const K = y % 100;
+  const J = Math.floor(y / 100);
+
+  const h =
+    (day +
+      Math.floor((13 * (m + 1)) / 5) +
+      K +
+      Math.floor(K / 4) +
+      Math.floor(J / 4) +
+      5 * J) % 7;
+
+  // Zeller: 0=Saturday → convert to 0=Sunday
+  const weekdayIndex = (h + 6) % 7;
+
+  return `${weekdays[weekdayIndex]} ${months[month - 1]} ${day} ${year}`;
+}
+
 /*---------------------------BOT COMMANDS---------------------------*/
     const commands = [
         { name: "/whoscoming", desc: "Create a poll asking who's attending on that date." },
@@ -316,11 +350,20 @@ async function pm(IDs, text) {
         //   }
     // });
 
-app.command("/whoscoming", async ({ ack, body, client }) => {
+app.command("/test", async ({ ack, body, client }) => {
     await ack();
 
     const channelId = body.channel_id;
 
+    // Attempt to join channel
+    try {
+        await client.conversations.join({ channel: channelId });
+    } catch (err) {
+        if (err.data?.error !== "method_not_supported_for_channel_type") {
+            console.warn(`Could not join channel ${channelId}: ${err.data?.error}`);
+        }
+    }
+        
     try {
         await client.views.open({
             trigger_id: body.trigger_id,
@@ -366,18 +409,13 @@ app.view("whoscoming_modal", async ({ ack, body, view, client }) => {
 
 
     const dateInput = view.state.values.date_block.meeting_date.selected_date;
-
+    console.log("*****************************************************************\n\n\n", dateInput, "\n\n\n*****************************************************************")
     const channelId = body.view.private_metadata;
+    const safeDate = formatSlackDateToDateString(dateInput);
 
     try {
-        // Attempt to join channel
-        try {
-            await client.conversations.join({ channel: channelId });
-        } catch (err) {
-            if (err.data?.error !== "method_not_supported_for_channel_type") {
-                console.warn(`Could not join channel ${channelId}: ${err.data?.error}`);
-            }
-        }
+        // // Attempt to join channel
+        
 
         // Prevent duplicates
         const alreadyExists = await findDuplicateMeeting(channelId, dateInput);
@@ -385,7 +423,7 @@ app.view("whoscoming_modal", async ({ ack, body, view, client }) => {
         if (alreadyExists) {
             await client.chat.postMessage({
                 channel: body.user.id,
-                text: `A meeting poll for *${new Date(dateInput).toDateString()}* already exists in <#${channelId}>.`
+                text: `A meeting poll for *${safeDate}* already exists in <#${channelId}>.`
             });
             return;
         }
@@ -393,7 +431,7 @@ app.view("whoscoming_modal", async ({ ack, body, view, client }) => {
         // Post the poll
         const pollMsg = await client.chat.postMessage({
             channel: channelId,
-            text: `<!channel> Who is going to the meeting on *${new Date(dateInput).toDateString()}*?\nReact with:  ✅ yes   ❌ no`,
+            text: `<!channel> Who is going to the meeting on *${safeDate}*?\nReact with:  ✅ yes   ❌ no`,
         });
 
         // Add reactions
@@ -452,7 +490,7 @@ app.command("/meetingreport", async ({ command, ack, client }) => {
         const meetings = loadMeetings();
         const channelMeetings = meetings[channelId] || [];
 
-        // 📝 No date provided → show available poll dates
+        //No date provided → show available poll dates
         if (!dateInput) {
             if (channelMeetings.length === 0) {
                 await client.chat.postEphemeral({
@@ -474,7 +512,7 @@ app.command("/meetingreport", async ({ command, ack, client }) => {
             return;
         }
 
-        // 📊 Date provided → find that poll
+        //Date provided → find that poll
         const meeting = channelMeetings.find(m => m.date === dateInput);
         if (!meeting) {
             await client.chat.postEphemeral({

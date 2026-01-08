@@ -56,10 +56,6 @@ function sqlDate(dateStr) {
 
     return `${year}-${mm}-${dd}`;
 }
-const c = "C09LX4QM21K"
-const t = 1760656501.229439
-
-console.log(await findDuplicateMeeting(c, "11/21/2031"))
 
 export async function findDuplicateMeeting(channel, date) {
     const meetings = await getMeeting(channel) || [];
