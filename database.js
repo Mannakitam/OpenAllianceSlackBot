@@ -46,6 +46,14 @@ export async function getMeeting(id, ts, dt) {
         `, [id])
     return hi[0]
 }
+
+export async function getMeetingWithTS(id) {
+    const hi = await pool.query(`
+        SELECT date, ts FROM meetings WHERE channelID = (?)
+        `, [id])
+    return hi[0]
+}
+
 function sqlDate(dateStr) {
     // expects "MM/DD/YYYY"
     const [month, day, year] = dateStr.split('/');

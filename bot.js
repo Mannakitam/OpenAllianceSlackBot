@@ -6,7 +6,7 @@ import cron from 'node-cron';
 import fs from "fs";
 
 import { generateDailyReport } from './openAllianceSummary/generateDailyReport.js'
-import { addMeeting, getMeeting, findDuplicateMeeting } from './database.js';
+import { addMeeting, getMeetingWithTS, findDuplicateMeeting } from './database.js';
 import dotenv from "dotenv"
 dotenv.config()
 
@@ -22,129 +22,8 @@ const app = new App({
 });
 
 // Configuration - Replace with your actual channel ID
-const DAILY_REPORT_CHANNEL = process.env.SLACK_DAILY_REPORT_CHANNEL; // Replace with your channel ID
+const DAILY_REPORT_CHANNEL = process.env.SLACK_DAILY_REPORT_CHANNEL;
 
-
-// Function to format and send the daily report
-async function sendDailyReport() {
-    try {
-        const reportData = await generateDailyReport();
-
-        if (reportData.status === 'error') {
-            // Send error message
-            await app.client.chat.postMessage({
-                token: process.env.SLACK_BOT_TOKEN,
-                channel: DAILY_REPORT_CHANNEL,
-                text: '⚠️ Daily Report - Service Issue',
-                blocks: [
-                    {
-                        type: 'header',
-                        text: {
-                            type: 'plain_text',
-                            text: '⚠️ Daily Report - Service Issue'
-                        }
-                    },
-                    {
-                        type: 'section',
-                        text: {
-                            type: 'mrkdwn',
-                            text: `*Time:* ${reportData.timestamp}\n*Status:* ${reportData.message}`
-                        }
-                    }
-                ]
-            });
-            return;
-        }
-
-        // Create rich formatted message with both API results
-        const blocks = [
-            {
-                type: 'header',
-                text: {
-                    type: 'plain_text',
-                    text: '📊 Daily Data Report - 9:30 PM Update'
-                }
-            },
-            {
-                type: 'context',
-                elements: [
-                    {
-                        type: 'mrkdwn',
-                        text: `📅 Generated on ${reportData.timestamp}`
-                    }
-                ]
-            },
-            {
-                type: 'divider'
-            }
-        ];
-
-
-        // Add AI Analysis section
-        blocks.push({
-            type: 'section',
-            text: {
-                type: 'mrkdwn',
-                text: `🤖 *AI Analysis (${reportData.aiAnalysis.model})*\n${reportData.aiAnalysis.analysis}`
-            }
-        });
-
-
-
-        // Add footer
-        blocks.push(
-            {
-                type: 'divider'
-            },
-            {
-                type: 'context',
-                elements: [
-                    {
-                        type: 'mrkdwn',
-                        text: 'Automated report Generated every day at 9:30 PM'
-                    }
-                ]
-            }
-        );
-
-
-
-        // Send the formatted message
-        await app.client.chat.postMessage({
-            token: process.env.SLACK_BOT_TOKEN,
-            channel: DAILY_REPORT_CHANNEL,
-            text: '📊 Daily Data Report - 9:30 PM Update',
-            blocks: blocks
-        });
-
-        console.log('✅ Daily report sent successfully to Slack');
-
-    } catch (error) {
-        console.error('❌ Error sending daily report:', error);
-
-        // Send fallback message
-        await app.client.chat.postMessage({
-            token: process.env.SLACK_BOT_TOKEN,
-            channel: DAILY_REPORT_CHANNEL,
-            text: '⚠️ Daily report failed to send. Please check the bot logs.'
-        });
-    }
-}
-
-// Schedule the daily report at 9:30 PM
-// cron.schedule('28 20 * * *', async () => {
-    //   console.log('9:30 PM - Triggering daily report...');
-    //   await sendDailyReport();
-    // }, {
-        //   timezone: "America/New_York" // Change to your timezone
-        // });
-
-// // message leads asking them for photos and videos, add to a Google drive folder
-// cron.schedule('17 00 * * *', async() => {
-    //   await pm(process.env.SLACK_USER_IDS, `Please add any photos or videos from todays meeting to <${process.env.GOOGLE_DRIVE_LINK}| google drive>`);
-    // },{
-        //   timezone: "America/New_York" //timezone
-        // });
 
 
 // Start the app
@@ -278,79 +157,8 @@ function formatSlackDateToDateString(dateStr) {
         { name: "/help", desc: "Show this help menu." },
     ];
 
-//Command to create poll
-// app.command("/whoscoming", async ({ command, ack, client }) => {
-    //   await ack();
 
-    //   const dateInput = command.text.trim();
-    //   const channelId = command.channel_id;
-
-    //   try {
-
-        //     //try to join channel if not in (so you dont have to invite every time)
-        //     try {
-            //       await client.conversations.join({ channel: channelId });
-            //       console.log(`Joined channel ${channelId}`);
-            //     } catch (joinError) {
-                //       if (joinError.data?.error !== "method_not_supported_for_channel_type") {
-                    //         console.warn(`Could not auto-join channel ${channelId}:`, joinError.data?.error);
-                    //       }
-                //     }
-
-        //     const meetings = loadMeetings();
-
-        //     // Ensure channel entry exists
-        //     if (!meetings[channelId]) meetings[channelId] = [];
-
-        //     const newDate = new Date(dateInput);
-
-        //     //Check for existing meeting with same date
-        //     const existingMeeting = meetings[channelId].find(
-            //       (m) => new Date(m.date).toDateString() === newDate.toDateString()
-            //     );
-
-        //     if (existingMeeting) {
-            //       await client.chat.postEphemeral({
-                //         channel: channelId,
-                //         user: command.user_id,
-                //         text: `A meeting poll already exists for *${dateInput}*`,
-                //       });
-            //       console.log(1)
-            //       return;
-            //     }
-        //       const showDate = new Date(dateInput).toDateString()
-        //       // 1. Post poll message
-        //       const result = await client.chat.postMessage({
-            //         channel: channelId,
-            //         text: `<!channel> Who is going to the meeting on *${showDate}*? React with ✅ or ❌`,
-            //       });
-
-        //       // 2. Add reactions
-        //       await client.reactions.add({ channel: result.channel, timestamp: result.ts, name: "white_check_mark" });
-        //       await client.reactions.add({ channel: result.channel, timestamp: result.ts, name: "x" });
-
-        //       // 3. Save poll to JSON
-        //       if (!meetings[channelId]) meetings[channelId] = [];
-
-        //       meetings[channelId].push({
-            //         ts: result.ts,
-            //         date: dateInput,
-            //       });
-        //       saveMeetings(meetings);
-
-
-        //       await client.chat.postEphemeral({
-            //         channel: channelId,
-            //         user: command.user_id,
-            //         text: `Meeting poll created and saved for *${dateInput}*`,
-            //       });
-        //   }
-    //   catch (error) {
-        //     console.error("Error posting testreport:", error);
-        //   }
-    // });
-
-app.command("/test", async ({ ack, body, client }) => {
+app.command("/whoscoming", async ({ ack, body, client }) => {
     await ack();
 
     const channelId = body.channel_id;
@@ -463,96 +271,110 @@ app.view("whoscoming_modal", async ({ ack, body, view, client }) => {
     }
 });
 
-
-app.command("/clearmeetings", async ({ command, ack, client }) => {
+app.command("/test", async ({ command, ack, client }) => {
     await ack();
 
     const channelId = command.channel_id;
+    const channelMeetings = (await getMeetingWithTS(channelId))
+        .sort((a, b) => new Date(b.date) - new Date(a.date));
 
-    try {
-        const meetings = loadMeetings();
-        if (!meetings[channelId]) meetings[channelId] = [];
+    //console.log("****\n\n\n", channelMeetings, "\n\n\n****")
 
-        meetings[channelId] = [];
-        saveMeetings(meetings);
-    } catch (error) {
-        console.error("Error clearing meetings:", error);
+    if (!channelMeetings.length) {
+        await client.chat.postEphemeral({
+        channel: channelId,
+        user: command.user_id,
+        text: "There are no meeting polls saved in this channel.",
+    });
+
+    return;
     }
+
+    // Build dropdown options
+    const options = channelMeetings.map(m => ({
+        text: {
+            type: "plain_text",
+            text: new Date(m.date).toDateString(),
+        },
+        value: m.ts, // IMPORTANT: store timestamp, not date
+    }));
+
+    await client.views.open({
+        trigger_id: command.trigger_id,
+        view: {
+            type: "modal",
+            callback_id: "meetingreport_modal",
+            private_metadata: channelId,
+            title: { type: "plain_text", text: "Meeting Report" },
+            submit: { type: "plain_text", text: "View" },
+            close: { type: "plain_text", text: "Cancel" },
+            blocks: [
+                {
+                type: "input",
+                block_id: "meeting_block",
+                label: { type: "plain_text", text: "Select a meeting" },
+                element: {
+                    type: "static_select",
+                    action_id: "meeting_select",
+                    options,
+                },
+                },
+            ],
+        },
+    });
 });
 
-app.command("/meetingreport", async ({ command, ack, client }) => {
+
+app.view("meetingreport_modal", async ({ ack, body, view, client }) => {
     await ack();
 
-    const dateInput = command.text.trim();
-    const channelId = command.channel_id;
+    const channelId = view.private_metadata;
+    const userId = body.user.id;
 
-    try {
-        const meetings = loadMeetings();
-        const channelMeetings = meetings[channelId] || [];
+    const selectedTs = view.state.values.meeting_block.meeting_select.selected_option.value;
 
-        //No date provided → show available poll dates
-        if (!dateInput) {
-            if (channelMeetings.length === 0) {
-                await client.chat.postEphemeral({
-                    channel: channelId,
-                    user: command.user_id,
-                    text: `There are no meeting polls saved in this channel.`,
-                });
-                return;
-            }
+    const channelMeetings = await getMeetingWithTS(channelId);
+    const meeting = channelMeetings.find(m => m.ts === selectedTs);
 
-            const datesList = channelMeetings.map(m => `• ${m.date}`).join("\n");
-
-            await client.chat.postEphemeral({
-                channel: channelId,
-                user: command.user_id,
-                text: `*Available meeting reports in this channel:*\n${datesList}\n\nRun \`/meetingreport <date>\` to view one.`,
-            });
-
-            return;
-        }
-
-        //Date provided → find that poll
-        const meeting = channelMeetings.find(m => m.date === dateInput);
-        if (!meeting) {
-            await client.chat.postEphemeral({
-                channel: channelId,
-                user: command.user_id,
-                text: `❌ No meeting poll found for *${dateInput}* in this channel.`,
-            });
-            return;
-        }
-
-        const auth = await client.auth.test();
-        const botUserId = auth.user_id;
-
-        const response = await client.reactions.get({
+    if (!meeting) {
+        await client.chat.postEphemeral({
             channel: channelId,
-            timestamp: meeting.ts,
+            user: userId,
+            text: "❌ Meeting not found.",
         });
-
-        const reactions = response.message.reactions || [];
-        const yesReaction = reactions.find(r => r.name === "white_check_mark");
-        const noReaction = reactions.find(r => r.name === "x");
-
-        const yesUsers = yesReaction
-            ? yesReaction.users.filter(u => u !== botUserId).map(u => `<@${u}>`)
-            : [];
-
-        const noUsers = noReaction
-            ? noReaction.users.filter(u => u !== botUserId).map(u => `<@${u}>`)
-            : [];
-
-        client.chat.postEphemeral({
-            channel: channelId,
-            user: command.user_id,
-            text: `*Meeting Report for ${meeting.date}*\n✅ Coming: ${yesUsers.length ? yesUsers.join(", ") : "None"}\n❌ Not coming: ${noUsers.length ? noUsers.join(", ") : "None"}`,
-        });
-
-    } catch (error) {
-        console.error("Error getting report:", error);
+        return;
     }
+
+    const auth = await client.auth.test();
+    const botUserId = auth.user_id;
+
+    const response = await client.reactions.get({
+        channel: channelId,
+        timestamp: meeting.ts,
+    });
+
+    const reactions = response.message.reactions || [];
+    const yesReaction = reactions.find(r => r.name === "white_check_mark");
+    const noReaction = reactions.find(r => r.name === "x");
+
+    const yesUsers = yesReaction
+        ? yesReaction.users.filter(u => u !== botUserId).map(u => `<@${u}>`)
+        : [];
+
+    const noUsers = noReaction
+        ? noReaction.users.filter(u => u !== botUserId).map(u => `<@${u}>`)
+        : [];
+
+    await client.chat.postEphemeral({
+        channel: channelId,
+        user: userId,
+        text:
+            `*Meeting Report for ${new Date(meeting.date).toDateString()}*\n` +
+            `✅ Coming: ${yesUsers.length ? yesUsers.join(", ") : "None"}\n` +
+            `❌ Not coming: ${noUsers.length ? noUsers.join(", ") : "None"}`,
+    });
 });
+
 
 app.command("/latestmeeting", async ({ command, ack, client }) => {
     await ack();
