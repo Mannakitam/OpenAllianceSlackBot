@@ -1,3 +1,435 @@
+**********************************************************************************************
+
+pp.command("/whoscomingtest", async ({ ack, body, client }) => {
+    await ack();
+
+    const channelId = body.channel_id;
+
+    // Attempt to join channel
+    // try {
+    //     await client.conversations.join({ channel: channelId });
+    // } catch (err) {
+    //     if (err.data?.error !== "method_not_supported_for_channel_type") {
+    //         console.warn(`Could not join channel ${channelId}: ${err.data?.error}`);
+    //     }
+    // }
+        
+    try {
+        await client.views.open({
+            trigger_id: body.trigger_id,
+            view: {
+                type: "modal",
+                callback_id: "whoscoming_modal",
+                private_metadata: channelId,
+                title: { type: "plain_text", text: "Meeting Poll" },
+                submit: { type: "plain_text", text: "Create" },
+                close: { type: "plain_text", text: "Cancel" },
+                blocks: [
+                    {
+                        type: "input",
+                        block_id: "date_block",
+                        label: { type: "plain_text", text: "Select meeting date" },
+                        element: {
+                            type: "datepicker",
+                            action_id: "meeting_date",
+                            placeholder: { type: "plain_text", text: "Pick a date" }
+                        }
+                    },
+                    // {
+                        //   type: "input",
+                        //   block_id: "channel_block",
+                        //   optional: true,
+                        //   label: { type: "plain_text", text: "Choose channel (optional)" },
+                        //   element: {
+                            //     type: "conversations_select",
+                            //     action_id: "poll_channel",
+                            //     default_to_current_conversation: true
+                            //   }
+                        // }
+                ]
+            }
+        });
+    } catch (err) {
+        console.error("Error opening modal:", err);
+    }
+});
+
+app.view("whoscoming_modal", async ({ ack, body, view, client }) => {
+    await ack();
+
+
+    const dateInput = view.state.values.date_block.meeting_date.selected_date;
+    //console.log("*****************************************************************\n\n\n", dateInput, "\n\n\n*****************************************************************")
+    const channelId = body.view.private_metadata;
+    const safeDate = formatSlackDateToDateString(dateInput);
+
+    try {
+        // // Attempt to join channel
+        
+
+        // Prevent duplicates
+        const alreadyExists = await findDuplicateMeeting(channelId, dateInput);
+
+        if (alreadyExists) {
+            await client.chat.postMessage({
+                channel: body.user.id,
+                text: `A meeting poll for *${safeDate}* already exists in <#${channelId}>.`
+            });
+            return;
+        }
+
+        // Post the poll
+        const pollMsg = await client.chat.postMessage({
+            channel: channelId,
+            text: `<!channel> Who is going to the meeting on *${safeDate}*?\nReact with:  ✅ yes   ❌ no`,
+        });
+
+        // Add reactions
+        await client.reactions.add({
+            channel: channelId,
+            timestamp: pollMsg.ts,
+            name: "white_check_mark"
+        });
+
+        await client.reactions.add({
+            channel: channelId,
+            timestamp: pollMsg.ts,
+            name: "x"
+        });
+
+        // Save poll to JSON
+        await addMeeting(channelId, pollMsg.ts, dateInput);
+
+        //saveMeetings(meetings);
+
+        // DM user confirmation
+        await client.chat.postMessage({
+            channel: body.user.id,
+            text: `Poll created for *${dateInput}*\nPosted in <#${channelId}>`
+        });
+
+    } catch (error) {
+        console.error("Error creating poll:", error);
+    }
+});
+
+app.command("/meetingreporttest", async ({ command, ack, client }) => {
+    console.log("received!!")
+    await ack();
+    console.log("hello!!")
+    const channelId = command.channel_id;
+    const channelMeetings = (await getMeetingWithTS(channelId))
+        .sort((a, b) => new Date(b.date) - new Date(a.date));
+
+    //console.log("****\n\n\n", channelMeetings, "\n\n\n****")
+
+    if (!channelMeetings.length) {
+        await client.chat.postEphemeral({
+        channel: channelId,
+        user: command.user_id,
+        text: "There are no meeting polls saved in this channel.",
+    });
+
+    return;
+    }
+
+    // Build dropdown options
+    const options = channelMeetings.map(m => ({
+        text: {
+            type: "plain_text",
+            text: new Date(m.date).toDateString(),
+        },
+        value: m.ts, // IMPORTANT: store timestamp, not date
+    }));
+
+    await client.views.open({
+        trigger_id: command.trigger_id,
+        view: {
+            type: "modal",
+            callback_id: "meetingreport_modal",
+            private_metadata: channelId,
+            title: { type: "plain_text", text: "Meeting Report" },
+            submit: { type: "plain_text", text: "View" },
+            close: { type: "plain_text", text: "Cancel" },
+            blocks: [
+                {
+                type: "input",
+                block_id: "meeting_block",
+                label: { type: "plain_text", text: "Select a meeting" },
+                element: {
+                    type: "static_select",
+                    action_id: "meeting_select",
+                    options,
+                },
+                },
+            ],
+        },
+    });
+});
+
+app.view("meetingreport_modal", async ({ ack, body, view, client }) => {
+    await ack();
+
+    const channelId = view.private_metadata;
+    const userId = body.user.id;
+
+    const selectedTs = view.state.values.meeting_block.meeting_select.selected_option.value;
+
+    const channelMeetings = await getMeetingWithTS(channelId);
+    const meeting = channelMeetings.find(m => m.ts === selectedTs);
+
+    if (!meeting) {
+        await client.chat.postEphemeral({
+            channel: channelId,
+            user: userId,
+            text: "❌ Meeting not found.",
+        });
+        return;
+    }
+
+    const auth = await client.auth.test();
+    const botUserId = auth.user_id;
+
+    const response = await client.reactions.get({
+        channel: channelId,
+        timestamp: meeting.ts,
+    });
+
+    const reactions = response.message.reactions || [];
+    const yesReaction = reactions.find(r => r.name === "white_check_mark");
+    const noReaction = reactions.find(r => r.name === "x");
+
+    const yesUsers = yesReaction
+        ? yesReaction.users.filter(u => u !== botUserId).map(u => `<@${u}>`)
+        : [];
+
+    const noUsers = noReaction
+        ? noReaction.users.filter(u => u !== botUserId).map(u => `<@${u}>`)
+        : [];
+
+    await client.chat.postEphemeral({
+        channel: channelId,
+        user: userId,
+        text:
+            `*Meeting Report for ${new Date(meeting.date).toDateString()}*\n` +
+            `✅ Coming: ${yesUsers.length ? yesUsers.join(", ") : "None"}\n` +
+            `❌ Not coming: ${noUsers.length ? noUsers.join(", ") : "None"}`,
+    });
+});
+
+app.command("/addmember", async ({ ack, command, client }) => {
+    await ack();
+
+    await client.views.open({
+        trigger_id: command.trigger_id,
+        view: {
+            type: "modal",
+            private_metadata: command.user_id,
+            callback_id: "addMember_modal",
+            title: { type: "plain_text", text: "Pick a User" },
+            submit: { type: "plain_text", text: "Select" },
+            close: { type: "plain_text", text: "Cancel" },
+            blocks: [
+            {
+                type: "input",
+                block_id: "users_block",
+                label: { type: "plain_text", text: "Choose a user" },
+                element: {
+                    type: "multi_users_select",
+                    action_id: "selected_users",
+                    placeholder: {
+                        type: "plain_text",
+                        text: "Search for a user",
+                    },
+                },
+            },
+            {
+                type: "input",
+                block_id: "channel_block",
+                label: { type: "plain_text", text: "Choose channel (channels start with #)" },
+                element: {
+                    type: "conversations_select",
+                    action_id: "poll_channel",
+                    default_to_current_conversation: true
+                }
+            }
+            ],
+        },
+    });
+});
+
+app.view("addMember_modal", async ({ack, body, view, client}) => {
+    await ack();
+
+    const userId = view.state.values.users_block.selected_users.selected_users;
+
+    const channelID = view.state.values.channel_block.poll_channel.selected_conversation;
+
+    //console.log("****\n\n\n", channelID, "\n", userId, "\n\n\n****")
+
+    for (const uId of userId){
+        
+        try {
+            // Add the user to your system
+            await addUser(channelID, uId);
+
+            // Send confirmation to the person who submitted the modal
+            try {
+                await client.chat.postEphemeral({
+                    channel: channelID,
+                    user: body.view.private_metadata, // modal owner
+                    text: `<@${uId}> has been added as a member of <#${channelID}>`,
+                });
+            } catch (error) {
+                console.error("***\n\nError posting the creation of a new member:", error, "\n\n***");
+            }
+        } catch(error) {
+        console.error("***\n\nError creating adding member:", error, "\n\n***");
+        }
+    }
+});
+
+app.command("/removemember", async ({ ack, command, client }) => {
+    await ack();
+
+    await client.views.open({
+        trigger_id: command.trigger_id,
+        view: {
+            type: "modal",
+            private_metadata: command.user_id,
+            callback_id: "removeMember_modal",
+            title: { type: "plain_text", text: "Pick a User" },
+            submit: { type: "plain_text", text: "Select" },
+            close: { type: "plain_text", text: "Cancel" },
+            blocks: [
+            {
+                type: "input",
+                block_id: "users_block",
+                label: { type: "plain_text", text: "Choose a user" },
+                element: {
+                    type: "multi_users_select",
+                    action_id: "selected_users",
+                    placeholder: {
+                        type: "plain_text",
+                        text: "Search for a user",
+                    },
+                },
+            },
+            {
+                type: "input",
+                block_id: "channel_block",
+                label: { type: "plain_text", text: "Choose channel (channels start with #)" },
+                element: {
+                    type: "conversations_select",
+                    action_id: "poll_channel",
+                    default_to_current_conversation: true
+                }
+            }
+            ],
+        },
+    });
+});
+
+app.view("removeMember_modal", async ({ack, body, view, client}) => {
+    await ack();
+
+    const userId = view.state.values.users_block.selected_users.selected_users;
+
+    const channelID = view.state.values.channel_block.poll_channel.selected_conversation;
+
+    //console.log("****\n\n\n", channelID, "\n", userId, "\n\n\n****")
+
+    for (const uId of userId){
+        
+        try {
+            // Add the user to your system
+            await removeUser(channelID, uId);
+
+            // Send confirmation to the person who submitted the modal
+            try {
+                await client.chat.postEphemeral({
+                    channel: channelID,
+                    user: body.view.private_metadata, // modal owner
+                    text: `<@${uId}> has been removed as a member of <#${channelID}>`,
+                });
+            } catch (error) {
+                console.error("***\n\nError posting the removal of a  member:", error, "\n\n***");
+            }
+        } catch(error) {
+        console.error("***\n\nError removing member:", error, "\n\n***");
+        }
+    }
+});
+
+app.command("/pingsubteam", async ({ack, command, client }) => {
+    await ack();
+
+    const message     =    command.text.trim();
+    const channelID   =    command.channel_id;
+    const sender      =    command.user_id;
+    const subteam     =    await getUsers(channelID);
+    
+    console.log("****\n\n\n", message, "\n", channelID, "\n", sender, "\n", subteam, "\n", "\n\n\n****")
+    try {
+        for (const userID of subteam){
+            //const userID = userObj.userID;
+
+            //Invite the user if they're not in the channel
+            try {
+                await client.conversations.invite({
+                channel: channelID,
+                users: userID.userID
+                });
+            } catch (err) {
+                if (err.data?.error !== "already_in_channel") {
+                    console.error(`Error inviting user ${userID}:`, err.data?.error);
+                    continue; // skip this user if invite fails
+                }
+            }
+
+            //send ping to each user induvidually
+            try {
+                await client.chat.postEphemeral({
+                    channel: channelID,
+                    user: userID.userID, // modal owner
+                    text: `<@${userID.userID}>`,
+                });
+            } catch (error) {
+                console.error("***\n\nError pinging member:", error, "\n\n***");
+            }
+        }
+
+        const res = await client.users.info({ user: sender });
+        const user = res.user;
+        const displayName = user.profile.display_name || user.real_name || "Unknown User";
+        const avatarUrl = user.profile.image_192 || user.profile.image_72;
+
+        await client.chat.postMessage({
+                    channel: channelID,
+                    text: message,
+                    username: displayName,
+                    icon_url: avatarUrl
+        });
+
+
+    } catch(error) {
+       console.error("Error pinging subteam:", error);
+    }
+});
+
+app.command("/help", async ({ ack, command, client }) => {
+    await ack();
+    const helpText = commands.map(c => `• \`${c.name}\` — ${c.desc}`).join("\n");
+
+    await client.chat.postEphemeral({
+        channel: command.channel_id,
+        user: command.user_id,
+        text: `*Available Commands:*\n${helpText}`,
+    });
+});
+
+**********************************************************************************************
+
 //clickup API stuff
 import dotenv from "dotenv"
 import { readFile,writeFile } from 'node:fs/promises';
@@ -464,3 +896,266 @@ function saveLeads(leads) {
     fs.writeFileSync(LEADS_FILE, JSON.stringify(leads, null, 2));
 }
 
+
+
+
+**********************************************************************
+
+app.command("/whoscomingtest", async ({ ack, body, client }) => {
+    await ack();
+
+    const channelId = body.channel_id;
+    const idem = `whoscoming:${body.trigger_id}`;
+
+    enqueue(channelId, async () => {
+        await runOnce(idem, async () => {
+            await client.views.open({
+                trigger_id: body.trigger_id,
+                view: {
+                    type: "modal",
+                    callback_id: "whoscoming_modal",
+                    private_metadata: channelId,
+                    title: { type: "plain_text", text: "Meeting Poll" },
+                    submit: { type: "plain_text", text: "Create" },
+                    close: { type: "plain_text", text: "Cancel" },
+                    blocks: [
+                        {
+                            type: "input",
+                            block_id: "date_block",
+                            label: { type: "plain_text", text: "Select meeting date" },
+                            element: {
+                                type: "datepicker",
+                                action_id: "meeting_date",
+                            },
+                        },
+                    ],
+                },
+            });
+        });
+    });
+});
+
+
+app.view("whoscoming_modal", async ({ ack, body, view, client }) => {
+    await ack();
+
+    const channelId = view.private_metadata;
+    const idem = `whoscoming_view:${body.view.id}`;
+
+    enqueue(channelId, async () => {
+        await runOnce(idem, async () => {
+            const dateInput =
+                view.state.values.date_block.meeting_date.selected_date;
+
+            const safeDate = formatSlackDateToDateString(dateInput);
+
+            const exists = await findDuplicateMeeting(channelId, dateInput);
+            if (exists) {
+                await client.chat.postMessage({
+                    channel: body.user.id,
+                    text: `A meeting poll for *${safeDate}* already exists in <#${channelId}>.`,
+                });
+                return;
+            }
+
+            const poll = await client.chat.postMessage({
+                channel: channelId,
+                text: `<!channel> Who is going to the meeting on *${safeDate}*?\nReact with ✅ or ❌`,
+            });
+
+            await client.reactions.add({
+                channel: channelId,
+                timestamp: poll.ts,
+                name: "white_check_mark",
+            });
+
+            await client.reactions.add({
+                channel: channelId,
+                timestamp: poll.ts,
+                name: "x",
+            });
+
+            await addMeeting(channelId, poll.ts, dateInput);
+
+            await client.chat.postMessage({
+                channel: body.user.id,
+                text: `Poll created for *${safeDate}* in <#${channelId}>`,
+            });
+        });
+    });
+});
+
+
+app.command("/meetingreporttest", async ({ ack, command, client }) => {
+    await ack();
+
+    const channelId = command.channel_id;
+    const idem = `meetingreport:${command.trigger_id}`;
+
+    enqueue(channelId, async () => {
+        await runOnce(idem, async () => {
+            const meetings = (await getMeetingWithTS(channelId))
+                .sort((a, b) => new Date(b.date) - new Date(a.date));
+
+            if (!meetings.length) {
+                await client.chat.postEphemeral({
+                    channel: channelId,
+                    user: command.user_id,
+                    text: "There are no meeting polls in this channel.",
+                });
+                return;
+            }
+
+            const options = meetings.map(m => ({
+                text: {
+                    type: "plain_text",
+                    text: new Date(m.date).toDateString(),
+                },
+                value: m.ts,
+            }));
+
+            await client.views.open({
+                trigger_id: command.trigger_id,
+                view: {
+                    type: "modal",
+                    callback_id: "meetingreport_modal",
+                    private_metadata: channelId,
+                    title: { type: "plain_text", text: "Meeting Report" },
+                    submit: { type: "plain_text", text: "View" },
+                    close: { type: "plain_text", text: "Cancel" },
+                    blocks: [
+                        {
+                            type: "input",
+                            block_id: "meeting_block",
+                            label: { type: "plain_text", text: "Select a meeting" },
+                            element: {
+                                type: "static_select",
+                                action_id: "meeting_select",
+                                options,
+                            },
+                        },
+                    ],
+                },
+            });
+        });
+    });
+});
+
+app.view("meetingreport_modal", async ({ ack, body, view, client }) => {
+    await ack();
+
+    const channelId = view.private_metadata;
+    const userId = body.user.id;
+    const ts =
+        view.state.values.meeting_block.meeting_select.selected_option.value;
+
+    enqueue(channelId, async () => {
+        const meetings = await getMeetingWithTS(channelId);
+        const meeting = meetings.find(m => m.ts === ts);
+        if (!meeting) return;
+
+        const auth = await client.auth.test();
+        const botId = auth.user_id;
+
+        const res = await client.reactions.get({
+            channel: channelId,
+            timestamp: meeting.ts,
+        });
+
+        const reactions = res.message.reactions || [];
+        const yes = reactions.find(r => r.name === "white_check_mark");
+        const no = reactions.find(r => r.name === "x");
+
+        const yesUsers = yes
+            ? yes.users.filter(u => u !== botId).map(u => `<@${u}>`)
+            : [];
+
+        const noUsers = no
+            ? no.users.filter(u => u !== botId).map(u => `<@${u}>`)
+            : [];
+
+        await client.chat.postEphemeral({
+            channel: channelId,
+            user: userId,
+            text:
+                `*Meeting Report for ${new Date(meeting.date).toDateString()}*\n` +
+                `✅ Coming: ${yesUsers.join(", ") || "None"}\n` +
+                `❌ Not coming: ${noUsers.join(", ") || "None"}`,
+        });
+    });
+});
+
+
+app.command("/addmember", async ({ ack, command, client }) => {
+    await ack();
+
+    enqueue(command.channel_id, async () => {
+        await client.views.open({
+            trigger_id: command.trigger_id,
+            view: {
+                type: "modal",
+                callback_id: "addMember_modal",
+                private_metadata: command.user_id,
+                title: { type: "plain_text", text: "Add Members" },
+                submit: { type: "plain_text", text: "Add" },
+                close: { type: "plain_text", text: "Cancel" },
+                blocks: [
+                    {
+                        type: "input",
+                        block_id: "users_block",
+                        label: { type: "plain_text", text: "Select users" },
+                        element: {
+                            type: "multi_users_select",
+                            action_id: "users",
+                        },
+                    },
+                    {
+                        type: "input",
+                        block_id: "channel_block",
+                        label: { type: "plain_text", text: "Channel" },
+                        element: {
+                            type: "conversations_select",
+                            action_id: "channel",
+                            default_to_current_conversation: true,
+                        },
+                    },
+                ],
+            },
+        });
+    });
+});
+
+app.view("addMember_modal", async ({ack, body, view, client}) => {
+    await ack();
+
+    const userId = view.state.values.users_block.selected_users.selected_users;
+
+    const channelID = view.state.values.channel_block.poll_channel.selected_conversation;
+
+    //console.log("****\n\n\n", channelID, "\n", userId, "\n\n\n****")
+
+    for (const uId of userId){
+        
+        try {
+            // Add the user to your system
+            await addUser(channelID, uId);
+
+            // Send confirmation to the person who submitted the modal
+            try {
+                await client.chat.postEphemeral({
+                    channel: channelID,
+                    user: body.view.private_metadata, // modal owner
+                    text: `<@${uId}> has been added as a member of <#${channelID}>`,
+                });
+            } catch (error) {
+                console.error("***\n\nError posting the creation of a new member:", error, "\n\n***");
+            }
+        } catch(error) {
+        console.error("***\n\nError creating adding member:", error, "\n\n***");
+        }
+    }
+});
+
+
+
+**********************************************************************

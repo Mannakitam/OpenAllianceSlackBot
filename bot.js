@@ -6,6 +6,9 @@ import cron from 'node-cron';
 import fs from "fs";
 
 import { generateDailyReport } from './openAllianceSummary/generateDailyReport.js'
+
+import { enqueue } from './queue.js';
+
 import { addMeeting, getMeetingWithTS, findDuplicateMeeting, addUser, getUsers, saveMessage, updateMessage, removeUser } from './database.js';
 import dotenv from "dotenv"
 dotenv.config()
@@ -204,13 +207,13 @@ app.command("/whoscomingtest", async ({ ack, body, client }) => {
     const channelId = body.channel_id;
 
     // Attempt to join channel
-    try {
-        await client.conversations.join({ channel: channelId });
-    } catch (err) {
-        if (err.data?.error !== "method_not_supported_for_channel_type") {
-            console.warn(`Could not join channel ${channelId}: ${err.data?.error}`);
-        }
-    }
+    // try {
+    //     await client.conversations.join({ channel: channelId });
+    // } catch (err) {
+    //     if (err.data?.error !== "method_not_supported_for_channel_type") {
+    //         console.warn(`Could not join channel ${channelId}: ${err.data?.error}`);
+    //     }
+    // }
         
     try {
         await client.views.open({

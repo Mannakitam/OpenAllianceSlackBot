@@ -125,3 +125,21 @@ export async function findDuplicateMeeting(channel, date) {
     return false;
 }
 
+
+
+
+export async function runOnce(id, task) {
+    const [rows] = await pool.query(
+        "SELECT id FROM slack_idempotency WHERE id = ?",
+        [id]
+    );
+
+    if (rows.length) return;
+
+    await pool.query(
+        "INSERT INTO slack_idempotency (id) VALUES (?)",
+        [id]
+    );
+
+    await task();
+}
