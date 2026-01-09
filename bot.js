@@ -487,7 +487,7 @@ app.view("addMember_modal", async ({ack, body, view, client}) => {
     }
 });
 
-app.command("/test", async ({ ack, command, client }) => {
+app.command("/removemember", async ({ ack, command, client }) => {
     await ack();
 
     await client.views.open({
