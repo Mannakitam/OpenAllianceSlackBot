@@ -64,6 +64,12 @@ export async function addUser(cID, uID) {
         `, [cID, uID])
 }
 
+export async function removeUser(cID, uID) {
+    await pool.query(`
+        DELETE FROM users WHERE channelID = (?) AND userID = (?) 
+        `, [cID, uID])
+}
+
 export async function getUsers(id) {
     const hi = await pool.query(`
         SELECT userID FROM users WHERE channelID = (?)

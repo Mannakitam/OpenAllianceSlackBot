@@ -6,7 +6,7 @@ import cron from 'node-cron';
 import fs from "fs";
 
 import { generateDailyReport } from './openAllianceSummary/generateDailyReport.js'
-import { addMeeting, getMeetingWithTS, findDuplicateMeeting, addUser, getUsers, saveMessage, updateMessage } from './database.js';
+import { addMeeting, getMeetingWithTS, findDuplicateMeeting, addUser, getUsers, saveMessage, updateMessage, removeUser } from './database.js';
 import dotenv from "dotenv"
 dotenv.config()
 
@@ -96,8 +96,8 @@ app.event("message", async ({ event, logger }) => {
     if (editedMessage.blocks) attachmentsJSON.blocks = editedMessage.blocks;
 
     const attachmentsString = Object.keys(attachmentsJSON).length
-      ? JSON.stringify(attachmentsJSON)
-      : null;
+        ? JSON.stringify(attachmentsJSON)
+        : null;
 
     // Update the database
     await updateMessage(text, edited_ts, attachmentsString, thread_ts, ts, channelID, userID);
@@ -198,7 +198,7 @@ function formatSlackDateToDateString(dateStr) {
     ];
 
 
-app.command("/whoscoming", async ({ ack, body, client }) => {
+app.command("/whoscomingtest", async ({ ack, body, client }) => {
     await ack();
 
     const channelId = body.channel_id;
@@ -311,9 +311,10 @@ app.view("whoscoming_modal", async ({ ack, body, view, client }) => {
     }
 });
 
-app.command("/meetingreport", async ({ command, ack, client }) => {
+app.command("/meetingreporttest", async ({ command, ack, client }) => {
+    console.log("received!!")
     await ack();
-
+    console.log("hello!!")
     const channelId = command.channel_id;
     const channelMeetings = (await getMeetingWithTS(channelId))
         .sort((a, b) => new Date(b.date) - new Date(a.date));
@@ -486,6 +487,78 @@ app.view("addMember_modal", async ({ack, body, view, client}) => {
     }
 });
 
+app.command("/test", async ({ ack, command, client }) => {
+    await ack();
+
+    await client.views.open({
+        trigger_id: command.trigger_id,
+        view: {
+            type: "modal",
+            private_metadata: command.user_id,
+            callback_id: "removeMember_modal",
+            title: { type: "plain_text", text: "Pick a User" },
+            submit: { type: "plain_text", text: "Select" },
+            close: { type: "plain_text", text: "Cancel" },
+            blocks: [
+            {
+                type: "input",
+                block_id: "users_block",
+                label: { type: "plain_text", text: "Choose a user" },
+                element: {
+                    type: "multi_users_select",
+                    action_id: "selected_users",
+                    placeholder: {
+                        type: "plain_text",
+                        text: "Search for a user",
+                    },
+                },
+            },
+            {
+                type: "input",
+                block_id: "channel_block",
+                label: { type: "plain_text", text: "Choose channel (channels start with #)" },
+                element: {
+                    type: "conversations_select",
+                    action_id: "poll_channel",
+                    default_to_current_conversation: true
+                }
+            }
+            ],
+        },
+    });
+});
+
+app.view("removeMember_modal", async ({ack, body, view, client}) => {
+    await ack();
+
+    const userId = view.state.values.users_block.selected_users.selected_users;
+
+    const channelID = view.state.values.channel_block.poll_channel.selected_conversation;
+
+    //console.log("****\n\n\n", channelID, "\n", userId, "\n\n\n****")
+
+    for (const uId of userId){
+        
+        try {
+            // Add the user to your system
+            await removeUser(channelID, uId);
+
+            // Send confirmation to the person who submitted the modal
+            try {
+                await client.chat.postEphemeral({
+                    channel: channelID,
+                    user: body.view.private_metadata, // modal owner
+                    text: `<@${uId}> has been removed as a member of <#${channelID}>`,
+                });
+            } catch (error) {
+                console.error("***\n\nError posting the removal of a  member:", error, "\n\n***");
+            }
+        } catch(error) {
+        console.error("***\n\nError removing member:", error, "\n\n***");
+        }
+    }
+});
+
 app.command("/pingsubteam", async ({ack, command, client }) => {
     await ack();
 
@@ -497,13 +570,13 @@ app.command("/pingsubteam", async ({ack, command, client }) => {
     console.log("****\n\n\n", message, "\n", channelID, "\n", sender, "\n", subteam, "\n", "\n\n\n****")
     try {
         for (const userID of subteam){
-            const userID = userObj.userID;
+            //const userID = userObj.userID;
 
             //Invite the user if they're not in the channel
             try {
                 await client.conversations.invite({
                 channel: channelID,
-                users: userID
+                users: userID.userID
                 });
             } catch (err) {
                 if (err.data?.error !== "already_in_channel") {
