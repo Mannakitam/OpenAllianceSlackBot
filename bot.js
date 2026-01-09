@@ -48,69 +48,69 @@ const DAILY_REPORT_CHANNEL = process.env.SLACK_DAILY_REPORT_CHANNEL;
 })();
 
 //message logger
-app.event("message", async ({ event, client, logger }) => {
-    try {
+// app.event("message", async ({ event, client, logger }) => {
+//     try {
 
-        const channelID   =   event.channel;
-        const userID      =   event.user || event.bot_id || "unknown_bot";
-        const text        =   event.text || "";
-        const ts          =   event.ts;
-        const thread_ts   =   event.thread_ts || null;
-        const edited_ts   =   event.edited?.ts || null;
+//         const channelID   =   event.channel;
+//         const userID      =   event.user || event.bot_id || "unknown_bot";
+//         const text        =   event.text || "";
+//         const ts          =   event.ts;
+//         const thread_ts   =   event.thread_ts || null;
+//         const edited_ts   =   event.edited?.ts || null;
         
-        const attachmentsJSON = {};
-        if (event.attachments) attachmentsJSON.attachments = event.attachments;
-        if (event.blocks) attachmentsJSON.blocks = event.blocks;
+//         const attachmentsJSON = {};
+//         if (event.attachments) attachmentsJSON.attachments = event.attachments;
+//         if (event.blocks) attachmentsJSON.blocks = event.blocks;
 
-        const attachmentsString = Object.keys(attachmentsJSON).length
-        ? JSON.stringify(attachmentsJSON)
-        : null;
+//         const attachmentsString = Object.keys(attachmentsJSON).length
+//         ? JSON.stringify(attachmentsJSON)
+//         : null;
 
 
-        console.log(`New message in ${channelID} from ${userID}: ${text}`);
+//         console.log(`New message in ${channelID} from ${userID}: ${text}`);
 
-        // Save to database
-        await saveMessage(channelID, userID, text, ts, thread_ts, edited_ts, attachmentsString);
+//         // Save to database
+//         await saveMessage(channelID, userID, text, ts, thread_ts, edited_ts, attachmentsString);
 
-        console.log(`Message saved to DB: ${ts}`);
+//         console.log(`Message saved to DB: ${ts}`);
 
-    } catch (error) {
-        console.error("Error handling message event:", error);
-    }
-});
+//     } catch (error) {
+//         console.error("Error handling message event:", error);
+//     }
+// });
 
-app.event("message", async ({ event, logger }) => {
-  try {
-    // Only handle edits
-    if (event.subtype !== "message_changed") return;
+// app.event("message", async ({ event, logger }) => {
+//   try {
+//     // Only handle edits
+//     if (event.subtype !== "message_changed") return;
 
-    const editedMessage = event.message;  
+//     const editedMessage = event.message;  
 
-    const channelID     =   event.channel;      
-    const userID        =   event.user || event.bot_id || "unknown_bot";
-    const text          =   editedMessage.text || "";
-    const ts            =   editedMessage.ts;          
-    const thread_ts     =   editedMessage.thread_ts || null;
-    const edited_ts     =   editedMessage.edited?.ts || null;
+//     const channelID     =   event.channel;      
+//     const userID        =   event.user || event.bot_id || "unknown_bot";
+//     const text          =   editedMessage.text || "";
+//     const ts            =   editedMessage.ts;          
+//     const thread_ts     =   editedMessage.thread_ts || null;
+//     const edited_ts     =   editedMessage.edited?.ts || null;
 
-    // Correctly get attachments and blocks from the inner message
-    const attachmentsJSON = {};
-    if (editedMessage.attachments) attachmentsJSON.attachments = editedMessage.attachments;
-    if (editedMessage.blocks) attachmentsJSON.blocks = editedMessage.blocks;
+//     // Correctly get attachments and blocks from the inner message
+//     const attachmentsJSON = {};
+//     if (editedMessage.attachments) attachmentsJSON.attachments = editedMessage.attachments;
+//     if (editedMessage.blocks) attachmentsJSON.blocks = editedMessage.blocks;
 
-    const attachmentsString = Object.keys(attachmentsJSON).length
-        ? JSON.stringify(attachmentsJSON)
-        : null;
+//     const attachmentsString = Object.keys(attachmentsJSON).length
+//         ? JSON.stringify(attachmentsJSON)
+//         : null;
 
-    // Update the database
-    await updateMessage(text, edited_ts, attachmentsString, thread_ts, ts, channelID, userID);
+//     // Update the database
+//     await updateMessage(text, edited_ts, attachmentsString, thread_ts, ts, channelID, userID);
 
-    console.log(`Message updated in DB: ${ts}`);
+//     console.log(`Message updated in DB: ${ts}`);
 
-  } catch (error) {
-    console.error("Error handling edited message:", error);
-  }
-});
+//   } catch (error) {
+//     console.error("Error handling edited message:", error);
+//   }
+// });
 
 
 
@@ -201,7 +201,7 @@ function formatSlackDateToDateString(dateStr) {
     ];
 
 
-app.command("/whoscomingtest", async ({ ack, body, client }) => {
+app.command("/whoscoming", async ({ ack, body, client }) => {
     await ack();
 
     const channelId = body.channel_id;
@@ -314,7 +314,7 @@ app.view("whoscoming_modal", async ({ ack, body, view, client }) => {
     }
 });
 
-app.command("/meetingreporttest", async ({ command, ack, client }) => {
+app.command("/meetingreport", async ({ command, ack, client }) => {
     console.log("received!!")
     await ack();
     console.log("hello!!")
