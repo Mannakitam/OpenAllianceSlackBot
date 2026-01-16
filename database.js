@@ -77,6 +77,13 @@ export async function getUsers(id) {
     return hi[0]
 }
 
+export async function getUserRoles(id) {
+    const hi = await pool.query(`
+        SELECT channelID FROM users WHERE userID = (?)
+        `, [id])
+    return hi[0]
+}
+
 export async function getMeeting(id, ts, dt) {
     const hi = await pool.query(`
         SELECT date FROM meetings WHERE channelID = (?)

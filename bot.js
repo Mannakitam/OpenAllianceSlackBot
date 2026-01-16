@@ -9,7 +9,7 @@ import { generateDailyReport } from './openAllianceSummary/generateDailyReport.j
 
 import { enqueue } from './queue.js';
 
-import { addMeeting, getMeetingWithTS, findDuplicateMeeting, addUser, getUsers, saveMessage, updateMessage, removeUser } from './database.js';
+import { addMeeting, getMeetingWithTS, findDuplicateMeeting, addUser, getUsers, saveMessage, getUserRoles, removeUser } from './database.js';
 import dotenv from "dotenv"
 dotenv.config()
 
@@ -629,6 +629,62 @@ app.command("/help", async ({ ack, command, client }) => {
     });
 });
 
+app.command("/showroles", async({ack, command, client}) => {
+    await ack();
+
+    const PostchannelID   =    command.channel_id;
+    const subteam     =    await getUsers(PostchannelID);
+    const sender      =    command.user_id;
+    const message = [];
+
+    try {
+        for (const userID of subteam){
+            //console.log(userID.userID, "*************************")
+            const roles = await getUserRoles(userID.userID);
+            const res = await client.users.info({ user: userID.userID });
+            const user = res.user;
+            const displayName = user.profile.display_name || user.real_name || "Unknown User";
+            const avatarUrl = user.profile.image_192 || user.profile.image_72;
+
+            let roleString = ``;
+
+            for(const channelID of roles){
+                roleString += `<#${channelID.channelID}>\n`;
+            }
+
+            message.push(
+                {
+                "type": "divider"
+                },
+                {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": `*${displayName}*\nRoles:\n${roleString}`
+                    },
+                "accessory": {
+                    "type": "image",
+                    "image_url": avatarUrl,
+                    "alt_text": "avatar thumbnail"
+                    }
+                },
+            )
+        }
+         message.push(
+                {
+                "type": "divider"
+                },
+            )
+        await app.client.chat.postEphemeral({
+            user:sender,
+            channel: PostchannelID,
+            text: "Test message",
+            blocks: message
+        });
+    } catch(err) {
+        console.error("Error with Show Roles:\n", err);
+    }       
+});
 /*---------- LOTS OF TEST CODE ----------*/
     async function findConversation() {
         try {
