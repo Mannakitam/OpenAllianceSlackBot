@@ -8,8 +8,8 @@ import fs from "fs";
 import { generateDailyReport } from './openAllianceSummary/generateDailyReport.js'
 
 import { enqueue } from './queue.js';
-
-import { addMeeting, getMeetingWithTS, findDuplicateMeeting, addUser, getUsers, saveMessage, getUserRoles, removeUser } from './database.js';
+//import * as database from './database.js'
+import { addMeeting, getMeetingWithTS, findDuplicateMeeting, saveMessage, getUserRoles, createRole, deleteRole, getRoles, addUserToRole, removeUserFromRole, getRoleMembers, getUsersInRole, getRoleByName } from './database.js';
 import dotenv from "dotenv"
 dotenv.config()
 
@@ -315,9 +315,9 @@ app.view("whoscoming_modal", async ({ ack, body, view, client }) => {
 });
 
 app.command("/meetingreport", async ({ command, ack, client }) => {
-    console.log("received!!")
+    //console.log("received!!")
     await ack();
-    console.log("hello!!")
+    //console.log("hello!!")
     const channelId = command.channel_id;
     const channelMeetings = (await getMeetingWithTS(channelId))
         .sort((a, b) => new Date(b.date) - new Date(a.date));
@@ -418,205 +418,271 @@ app.view("meetingreport_modal", async ({ ack, body, view, client }) => {
     });
 });
 
-app.command("/addmember", async ({ ack, command, client }) => {
+app.command("/role", async ({ ack, command, client }) => {
     await ack();
 
-    await client.views.open({
-        trigger_id: command.trigger_id,
-        view: {
-            type: "modal",
-            private_metadata: command.user_id,
-            callback_id: "addMember_modal",
-            title: { type: "plain_text", text: "Pick a User" },
-            submit: { type: "plain_text", text: "Select" },
-            close: { type: "plain_text", text: "Cancel" },
-            blocks: [
-            {
-                type: "input",
-                block_id: "users_block",
-                label: { type: "plain_text", text: "Choose a user" },
-                element: {
-                    type: "multi_users_select",
-                    action_id: "selected_users",
-                    placeholder: {
-                        type: "plain_text",
-                        text: "Search for a user",
-                    },
-                },
-            },
-            {
-                type: "input",
-                block_id: "channel_block",
-                label: { type: "plain_text", text: "Choose channel (channels start with #)" },
-                element: {
-                    type: "conversations_select",
-                    action_id: "poll_channel",
-                    default_to_current_conversation: true
-                }
-            }
-            ],
-        },
-    });
-});
-
-app.view("addMember_modal", async ({ack, body, view, client}) => {
-    await ack();
-
-    const userId = view.state.values.users_block.selected_users.selected_users;
-
-    const channelID = view.state.values.channel_block.poll_channel.selected_conversation;
-
-    //console.log("****\n\n\n", channelID, "\n", userId, "\n\n\n****")
-
-    for (const uId of userId){
-        
-        try {
-            // Add the user to your system
-            await addUser(channelID, uId);
-
-            // Send confirmation to the person who submitted the modal
-            try {
-                await client.chat.postEphemeral({
-                    channel: channelID,
-                    user: body.view.private_metadata, // modal owner
-                    text: `<@${uId}> has been added as a member of <#${channelID}>`,
-                });
-            } catch (error) {
-                console.error("***\n\nError posting the creation of a new member:", error, "\n\n***");
-            }
-        } catch(error) {
-        console.error("***\n\nError creating adding member:", error, "\n\n***");
-        }
-    }
-});
-
-app.command("/removemember", async ({ ack, command, client }) => {
-    await ack();
-
-    await client.views.open({
-        trigger_id: command.trigger_id,
-        view: {
-            type: "modal",
-            private_metadata: command.user_id,
-            callback_id: "removeMember_modal",
-            title: { type: "plain_text", text: "Pick a User" },
-            submit: { type: "plain_text", text: "Select" },
-            close: { type: "plain_text", text: "Cancel" },
-            blocks: [
-            {
-                type: "input",
-                block_id: "users_block",
-                label: { type: "plain_text", text: "Choose a user" },
-                element: {
-                    type: "multi_users_select",
-                    action_id: "selected_users",
-                    placeholder: {
-                        type: "plain_text",
-                        text: "Search for a user",
-                    },
-                },
-            },
-            {
-                type: "input",
-                block_id: "channel_block",
-                label: { type: "plain_text", text: "Choose channel (channels start with #)" },
-                element: {
-                    type: "conversations_select",
-                    action_id: "poll_channel",
-                    default_to_current_conversation: true
-                }
-            }
-            ],
-        },
-    });
-});
-
-app.view("removeMember_modal", async ({ack, body, view, client}) => {
-    await ack();
-
-    const userId = view.state.values.users_block.selected_users.selected_users;
-
-    const channelID = view.state.values.channel_block.poll_channel.selected_conversation;
-
-    //console.log("****\n\n\n", channelID, "\n", userId, "\n\n\n****")
-
-    for (const uId of userId){
-        
-        try {
-            // Add the user to your system
-            await removeUser(channelID, uId);
-
-            // Send confirmation to the person who submitted the modal
-            try {
-                await client.chat.postEphemeral({
-                    channel: channelID,
-                    user: body.view.private_metadata, // modal owner
-                    text: `<@${uId}> has been removed as a member of <#${channelID}>`,
-                });
-            } catch (error) {
-                console.error("***\n\nError posting the removal of a  member:", error, "\n\n***");
-            }
-        } catch(error) {
-        console.error("***\n\nError removing member:", error, "\n\n***");
-        }
-    }
-});
-
-app.command("/pingsubteam", async ({ack, command, client }) => {
-    await ack();
-
-    const message     =    command.text.trim();
-    const channelID   =    command.channel_id;
-    const sender      =    command.user_id;
-    const subteam     =    await getUsers(channelID);
-    
-    console.log("****\n\n\n", message, "\n", channelID, "\n", sender, "\n", subteam, "\n", "\n\n\n****")
     try {
-        for (const userID of subteam){
-            //const userID = userObj.userID;
+        const [action, roleName] = command.text.trim().split(/\s+/);
+        const channelId = command.channel_id;
+        const userId = command.user_id;
 
-            //Invite the user if they're not in the channel
+        switch (action) {
+            case "create":
+                await createRole(roleName);
+                return client.chat.postEphemeral({
+                    channel: channelId,
+                    user: userId,
+                    text: `✅ Role *@${roleName}* created.`,
+                });
+
+            case "delete":
+                await deleteRole(roleName);
+                return client.chat.postEphemeral({
+                    channel: channelId,
+                    user: userId,
+                    text: `🗑️ Role *@${roleName}* deleted.`,
+                });
+
+            case "add":
+            case "remove":
+                return openRoleMemberModal(client, command.trigger_id, {
+                    action,
+                    channelId,
+                    roleName,
+                    requester: userId
+                });
+
+            case "list":
+                const roles = await getRoles();
+                return client.chat.postEphemeral({
+                    channel: channelId,
+                    user: userId,
+                    text: roles.length
+                        ? `*Roles:*\n${roles.map(r => `• @${r.name}`).join("\n")}`
+                        : "No roles exist yet."
+                });
+
+            default:
+                return client.chat.postEphemeral({
+                    channel: channelId,
+                    user: userId,
+                    text:
+                        "*Usage:*\n" +
+                        "`/role create <name>`\n" +
+                        "`/role delete <name>`\n" +
+                        "`/role add <name>`\n" +
+                        "`/role remove <name>`\n" +
+                        "`/role list`",
+                });
+        }
+    } catch(err) {
+        console.error("Error with /role:\n", err);
+    }
+});
+
+async function openRoleMemberModal(client, triggerId, meta) {
+    const channelId = meta.channelId;
+    const roles = (await getRoles())
+        .sort((a, b) => a.name.localeCompare(b.name));
+
+    //console.log("****\n\n\n", channelMeetings, "\n\n\n****")
+
+    if (!roles.length) {
+        await client.chat.postEphemeral({
+        channel: channelId,
+        user: meta.requester,
+        text: "There are no roles.",
+    });
+
+    return;
+    }
+
+    // Build dropdown options
+    const options = roles.map(m => ({
+        text: {
+            type: "plain_text",
+            text: m.name,
+        },
+        value: m.name,
+    }));
+
+    await client.views.open({
+        trigger_id: triggerId,
+        view: {
+            type: "modal",
+            callback_id: "role_member_modal",
+            private_metadata: JSON.stringify(meta),
+            title: { type: "plain_text", text: "Select Users" },
+            submit: { type: "plain_text", text: meta.action === "add" ? "Add" : "Remove" },
+            close: { type: "plain_text", text: "Cancel" },
+            blocks: [
+                {
+                    type: "input",
+                    block_id: "role_block",
+                    label: { type: "plain_text", text: "Select a role" },
+                    element: {
+                        type: "static_select",
+                        action_id: "role_select",
+                        options,
+                    },
+                },
+                {
+                    type: "input",
+                    block_id: "users",
+                    label: { type: "plain_text", text: "Choose users" },
+                    element: {
+                        type: "multi_users_select",
+                        action_id: "selected",
+                    },
+                },
+            ],
+        },
+    });
+}
+
+app.view("role_member_modal", async ({ ack, body, view, client }) => {
+    await ack();
+
+        const meta = JSON.parse(view.private_metadata);
+        const users = view.state.values.users.selected.selected_users;
+        const roleBlock = view.state.values.role_block?.role_select;
+        if (!roleBlock?.selected_option) {
+             throw new Error("No role selected");
+        }
+
+        const role = roleBlock.selected_option.value;
+
+        for (const user of users) {
+
+            //console.log("******\n\n", role, "\n\n******")
+            if (meta.action === "add") {
+                await addUserToRole(role, user);
+            } else {
+                await removeUserFromRole(role, user);
+            }
+        }
+
+        await client.chat.postEphemeral({
+            channel: meta.channelId,
+            user: meta.requester,
+            text:
+                `✅ ${meta.action === "add" ? "Added" : "Removed"} ` +
+                `${users.length} user(s) ${meta.action === "add" ? "to" : "from"} *@${role}*.`
+        });
+});
+
+app.command("/ping", async ({ ack, command, client }) => {
+    await ack();
+
+    try {
+        const channelId = command.channel_id;
+        const senderId = command.user_id;
+
+        const text = command.text.trim();
+        if (!text.startsWith("@")) {
+            return client.chat.postEphemeral({
+                channel: channelId,
+                user: senderId,
+                text: "Usage: `/ping @role [optional message]`",
+            });
+        }
+
+        // Split only once, so the rest preserves line breaks
+        const firstSpace = text.indexOf(" ");
+        const roleToken = firstSpace === -1 ? text : text.slice(0, firstSpace);
+        const message = firstSpace === -1 ? "" : text.slice(firstSpace + 1);
+
+        const roleName = roleToken.replace(/^@/, "");
+        //console.log(roleName)
+        const role1 = await getRoleByName(roleName);
+        const role = role1[0]
+        //console.log(role.name)
+        if (!role) {
+            return client.chat.postEphemeral({
+                channel: channelId,
+                user: senderId,
+                text: `Role *@${roleName}* does not exist.`,
+            });
+        }
+
+        const users = await getUsersInRole(role.name);
+        if (!users.length) {
+            return client.chat.postEphemeral({
+                channel: channelId,
+                user: senderId,
+                text: `*@${roleName}* has no members.`,
+            });
+        }
+
+        // Invite users if they are not in the channel
+        for (const u of users) {
             try {
                 await client.conversations.invite({
-                channel: channelID,
-                users: userID.userID
+                    channel: channelId,
+                    users: u.user_id,
                 });
             } catch (err) {
                 if (err.data?.error !== "already_in_channel") {
-                    console.error(`Error inviting user ${userID}:`, err.data?.error);
-                    continue; // skip this user if invite fails
+                    console.warn(`Invite failed for ${u.user_id}:`, err.data?.error);
                 }
-            }
-
-            //send ping to each user induvidually
-            try {
-                await client.chat.postEphemeral({
-                    channel: channelID,
-                    user: userID.userID, // modal owner
-                    text: `<@${userID.userID}>`,
-                });
-            } catch (error) {
-                console.error("***\n\nError pinging member:", error, "\n\n***");
             }
         }
 
-        const res = await client.users.info({ user: sender });
+        // Post ephemeral mentions **individually**
+        for (const u of users) {
+            await client.chat.postEphemeral({
+                channel: channelId,
+                user: u.user_id,
+                text:
+                    `*@${roleName}* <@${u.user_id}>`,
+            });
+        }
+
+        const res = await client.users.info({ user: senderId });
         const user = res.user;
         const displayName = user.profile.display_name || user.real_name || "Unknown User";
         const avatarUrl = user.profile.image_192 || user.profile.image_72;
 
         await client.chat.postMessage({
-                    channel: channelID,
+                    channel: channelId,
                     text: message,
                     username: displayName,
                     icon_url: avatarUrl
         });
 
-
-    } catch(error) {
-       console.error("Error pinging subteam:", error);
+    } catch (err) {
+        console.error("Error in /ping:", err);
     }
 });
+
+app.event("message", async ({ event, client }) => {
+  try {
+    if (!event.text || event.subtype) return; // ignore bot messages and edits
+
+    const roleMatch = event.text.match(/@(\w[\w-]*)/);
+    if (!roleMatch) return;
+
+    const roleName = roleMatch[1];
+    const role1 = await getRoleByName(roleName);
+    const role = role1[0]
+    if (!role) return;
+
+    const users = await getUsersInRole(role.name);
+    if (!users.length) return;
+
+    for (const u of users) {
+      await client.chat.postEphemeral({
+        channel: event.channel,
+        user: u.user_id,
+        text: `*@${roleName}* <@${u.user_id}>`
+      });
+    }
+
+  } catch (err) {
+    console.error("Error handling role ping message:", err);
+  }
+});
+
 
 app.command("/help", async ({ ack, command, client }) => {
     await ack();
@@ -629,62 +695,104 @@ app.command("/help", async ({ ack, command, client }) => {
     });
 });
 
-app.command("/showroles", async({ack, command, client}) => {
+app.command("/showroles", async ({ ack, command, client }) => {
     await ack();
 
-    const PostchannelID   =    command.channel_id;
-    const subteam     =    await getUsers(PostchannelID);
-    const sender      =    command.user_id;
-    const message = [];
+    const channelId = command.channel_id;
+    const senderId = command.user_id;
+    const text = command.text.trim();
+
+    let roleFilter = null;
+    if (text.startsWith("@")) {
+        roleFilter = text.slice(1); // remove "@"
+    }
 
     try {
-        for (const userID of subteam){
-            //console.log(userID.userID, "*************************")
-            const roles = await getUserRoles(userID.userID);
-            const res = await client.users.info({ user: userID.userID });
+        //Get all members in the channel
+        let allMembers = [];
+        let cursor;
+        do {
+            const res = await client.conversations.members({
+                channel: channelId,
+                cursor,
+                limit: 1000
+            });
+            allMembers.push(...res.members);
+            cursor = res.response_metadata?.next_cursor;
+        } while (cursor);
+
+        if (!allMembers.length) {
+            return client.chat.postEphemeral({
+                channel: channelId,
+                user: senderId,
+                text: "No members found in this channel."
+            });
+        }
+
+        //Build message blocks
+        const blocks = [];
+
+        for (const userId of allMembers) {
+            const userRoles = await getUserRoles(userId); // returns array of role objects {id, name}
+            console.log(userRoles)
+            // If a role filter is applied, skip users without it
+            if (roleFilter && !userRoles.some(r => r.role_id === roleFilter)) continue;
+
+            const res = await client.users.info({ user: userId });
             const user = res.user;
             const displayName = user.profile.display_name || user.real_name || "Unknown User";
             const avatarUrl = user.profile.image_192 || user.profile.image_72;
 
-            let roleString = ``;
+            let roleString = userRoles.map(r => `• \`@${r.role_id}\``).join("\n") || "_No roles_";
 
-            for(const channelID of roles){
-                roleString += `<#${channelID.channelID}>\n`;
-            }
-
-            message.push(
+            blocks.push(
+                { type: "divider" },
                 {
-                "type": "divider"
-                },
-                {
-                "type": "section",
-                "text": {
-                    "type": "mrkdwn",
-                    "text": `*${displayName}*\nRoles:\n${roleString}`
+                    type: "section",
+                    text: {
+                        type: "mrkdwn",
+                        text: `*${displayName}*\nRoles:\n${roleString}`
                     },
-                "accessory": {
-                    "type": "image",
-                    "image_url": avatarUrl,
-                    "alt_text": "avatar thumbnail"
+                    accessory: {
+                        type: "image",
+                        image_url: avatarUrl,
+                        alt_text: "avatar thumbnail"
                     }
-                },
-            )
+                }
+            );
         }
-         message.push(
-                {
-                "type": "divider"
-                },
-            )
-        await app.client.chat.postEphemeral({
-            user:sender,
-            channel: PostchannelID,
-            text: "Test message",
-            blocks: message
+
+        if (!blocks.length) {
+            return client.chat.postEphemeral({
+                channel: channelId,
+                user: senderId,
+                text: roleFilter
+                    ? `No members with role *@${roleFilter}* in this channel.`
+                    : "No members found."
+            });
+        }
+
+        blocks.push({ type: "divider" });
+
+        //Send ephemeral message
+        await client.chat.postEphemeral({
+            channel: channelId,
+            user: senderId,
+            text: "Roles in this channel",
+            blocks
         });
-    } catch(err) {
-        console.error("Error with Show Roles:\n", err);
-    }       
+
+    } catch (err) {
+        console.error("Error with /showroles:", err);
+        await client.chat.postEphemeral({
+            channel: channelId,
+            user: senderId,
+            text: "Something went wrong while fetching roles."
+        });
+    }
 });
+
+
 /*---------- LOTS OF TEST CODE ----------*/
     async function findConversation() {
         try {

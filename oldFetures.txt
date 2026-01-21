@@ -1159,3 +1159,294 @@ app.view("addMember_modal", async ({ack, body, view, client}) => {
 
 
 **********************************************************************
+
+
+app.command("/showroles", async({ack, command, client}) => {
+    await ack();
+
+    const PostchannelID   =    command.channel_id;
+    const subteam     =    await getUsers(PostchannelID);
+    const sender      =    command.user_id;
+    const message = [];
+
+    try {
+        for (const userID of subteam){
+            //console.log(userID.userID, "*************************")
+            const roles = await getUserRoles(userID.userID);
+            const res = await client.users.info({ user: userID.userID });
+            const user = res.user;
+            const displayName = user.profile.display_name || user.real_name || "Unknown User";
+            const avatarUrl = user.profile.image_192 || user.profile.image_72;
+
+            let roleString = ``;
+
+            for(const channelID of roles){
+                roleString += `<#${channelID.channelID}>\n`;
+            }
+
+            message.push(
+                {
+                "type": "divider"
+                },
+                {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": `*${displayName}*\nRoles:\n${roleString}`
+                    },
+                "accessory": {
+                    "type": "image",
+                    "image_url": avatarUrl,
+                    "alt_text": "avatar thumbnail"
+                    }
+                },
+            )
+        }
+         message.push(
+                {
+                "type": "divider"
+                },
+            )
+        await app.client.chat.postEphemeral({
+            user:sender,
+            channel: PostchannelID,
+            text: "Test message",
+            blocks: message
+        });
+    } catch(err) {
+        console.error("Error with Show Roles:\n", err);
+    }       
+});
+
+app.command("/addmember", async ({ ack, command, client }) => {
+    await ack();
+
+    await client.views.open({
+        trigger_id: command.trigger_id,
+        view: {
+            type: "modal",
+            private_metadata: command.user_id,
+            callback_id: "addMember_modal",
+            title: { type: "plain_text", text: "Pick a User" },
+            submit: { type: "plain_text", text: "Select" },
+            close: { type: "plain_text", text: "Cancel" },
+            blocks: [
+            {
+                type: "input",
+                block_id: "users_block",
+                label: { type: "plain_text", text: "Choose a user" },
+                element: {
+                    type: "multi_users_select",
+                    action_id: "selected_users",
+                    placeholder: {
+                        type: "plain_text",
+                        text: "Search for a user",
+                    },
+                },
+            },
+            {
+                type: "input",
+                block_id: "channel_block",
+                label: { type: "plain_text", text: "Choose channel (channels start with #)" },
+                element: {
+                    type: "conversations_select",
+                    action_id: "poll_channel",
+                    default_to_current_conversation: true
+                }
+            }
+            ],
+        },
+    });
+});
+
+app.view("addMember_modal", async ({ack, body, view, client}) => {
+    await ack();
+
+    const userId = view.state.values.users_block.selected_users.selected_users;
+
+    const channelID = view.state.values.channel_block.poll_channel.selected_conversation;
+
+    //console.log("****\n\n\n", channelID, "\n", userId, "\n\n\n****")
+
+    for (const uId of userId){
+        
+        try {
+            // Add the user to your system
+            await addUser(channelID, uId);
+
+            // Send confirmation to the person who submitted the modal
+            try {
+                await client.chat.postEphemeral({
+                    channel: channelID,
+                    user: body.view.private_metadata, // modal owner
+                    text: `<@${uId}> has been added as a member of <#${channelID}>`,
+                });
+            } catch (error) {
+                console.error("***\n\nError posting the creation of a new member:", error, "\n\n***");
+            }
+        } catch(error) {
+        console.error("***\n\nError creating adding member:", error, "\n\n***");
+        }
+    }
+});
+
+app.command("/removemember", async ({ ack, command, client }) => {
+    await ack();
+
+    await client.views.open({
+        trigger_id: command.trigger_id,
+        view: {
+            type: "modal",
+            private_metadata: command.user_id,
+            callback_id: "removeMember_modal",
+            title: { type: "plain_text", text: "Pick a User" },
+            submit: { type: "plain_text", text: "Select" },
+            close: { type: "plain_text", text: "Cancel" },
+            blocks: [
+            {
+                type: "input",
+                block_id: "users_block",
+                label: { type: "plain_text", text: "Choose a user" },
+                element: {
+                    type: "multi_users_select",
+                    action_id: "selected_users",
+                    placeholder: {
+                        type: "plain_text",
+                        text: "Search for a user",
+                    },
+                },
+            },
+            {
+                type: "input",
+                block_id: "channel_block",
+                label: { type: "plain_text", text: "Choose channel (channels start with #)" },
+                element: {
+                    type: "conversations_select",
+                    action_id: "poll_channel",
+                    default_to_current_conversation: true
+                }
+            }
+            ],
+        },
+    });
+});
+
+app.view("removeMember_modal", async ({ack, body, view, client}) => {
+    await ack();
+
+    const userId = view.state.values.users_block.selected_users.selected_users;
+
+    const channelID = view.state.values.channel_block.poll_channel.selected_conversation;
+
+    //console.log("****\n\n\n", channelID, "\n", userId, "\n\n\n****")
+
+    for (const uId of userId){
+        
+        try {
+            // Add the user to your system
+            await removeUser(channelID, uId);
+
+            // Send confirmation to the person who submitted the modal
+            try {
+                await client.chat.postEphemeral({
+                    channel: channelID,
+                    user: body.view.private_metadata, // modal owner
+                    text: `<@${uId}> has been removed as a member of <#${channelID}>`,
+                });
+            } catch (error) {
+                console.error("***\n\nError posting the removal of a  member:", error, "\n\n***");
+            }
+        } catch(error) {
+        console.error("***\n\nError removing member:", error, "\n\n***");
+        }
+    }
+});
+
+app.command("/pingsubteam", async ({ack, command, client }) => {
+    await ack();
+
+    const message     =    command.text.trim();
+    const channelID   =    command.channel_id;
+    const sender      =    command.user_id;
+    const subteam     =    await getUsers(channelID);
+    
+    console.log("****\n\n\n", message, "\n", channelID, "\n", sender, "\n", subteam, "\n", "\n\n\n****")
+    try {
+        for (const userID of subteam){
+            //const userID = userObj.userID;
+
+            //Invite the user if they're not in the channel
+            try {
+                await client.conversations.invite({
+                channel: channelID,
+                users: userID.userID
+                });
+            } catch (err) {
+                if (err.data?.error !== "already_in_channel") {
+                    console.error(`Error inviting user ${userID}:`, err.data?.error);
+                    continue; // skip this user if invite fails
+                }
+            }
+
+            //send ping to each user induvidually
+            try {
+                await client.chat.postEphemeral({
+                    channel: channelID,
+                    user: userID.userID, // modal owner
+                    text: `<@${userID.userID}>`,
+                });
+            } catch (error) {
+                console.error("***\n\nError pinging member:", error, "\n\n***");
+            }
+        }
+
+        const res = await client.users.info({ user: sender });
+        const user = res.user;
+        const displayName = user.profile.display_name || user.real_name || "Unknown User";
+        const avatarUrl = user.profile.image_192 || user.profile.image_72;
+
+        await client.chat.postMessage({
+                    channel: channelID,
+                    text: message,
+                    username: displayName,
+                    icon_url: avatarUrl
+        });
+
+
+    } catch(error) {
+       console.error("Error pinging subteam:", error);
+    }
+});
+
+
+************************************************************************
+
+export async function addUser(cID, uID) {
+    await pool.query(`
+        INSERT INTO users (channelID, userID)
+        VALUES (?, ?)
+        `, [cID, uID])
+}
+
+export async function removeUser(cID, uID) {
+    await pool.query(`
+        DELETE FROM users WHERE channelID = (?) AND userID = (?) 
+        `, [cID, uID])
+}
+
+export async function getUsers(id) {
+    const hi = await pool.query(`
+        SELECT userID FROM users WHERE channelID = (?)
+        `, [id])
+    return hi[0]
+}
+
+// export async function getUserRoles(id) {
+//     const hi = await pool.query(`
+//         SELECT channelID FROM users WHERE userID = (?)
+//         `, [id])
+//     return hi[0]
+// }
+
+
+*************************************************************88

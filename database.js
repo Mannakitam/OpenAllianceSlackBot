@@ -57,32 +57,6 @@ export async function addMeeting(id, ts, dt) {
         `, [id, ts, dt])   
 }
 
-export async function addUser(cID, uID) {
-    await pool.query(`
-        INSERT INTO users (channelID, userID)
-        VALUES (?, ?)
-        `, [cID, uID])
-}
-
-export async function removeUser(cID, uID) {
-    await pool.query(`
-        DELETE FROM users WHERE channelID = (?) AND userID = (?) 
-        `, [cID, uID])
-}
-
-export async function getUsers(id) {
-    const hi = await pool.query(`
-        SELECT userID FROM users WHERE channelID = (?)
-        `, [id])
-    return hi[0]
-}
-
-export async function getUserRoles(id) {
-    const hi = await pool.query(`
-        SELECT channelID FROM users WHERE userID = (?)
-        `, [id])
-    return hi[0]
-}
 
 export async function getMeeting(id, ts, dt) {
     const hi = await pool.query(`
@@ -149,4 +123,72 @@ export async function runOnce(id, task) {
     );
 
     await task();
+}
+
+export async function createRole(id) {
+    await pool.query(`
+        INSERT INTO role_names (name) VALUES (?)
+        `, [id])
+}
+
+export async function deleteRole(ID) {
+    await pool.query(`
+        DELETE FROM role_names WHERE name = (?) 
+        `, [ID])
+}
+
+export async function getRoles(){
+    const hi = await pool.query(`
+        SELECT name FROM role_names ORDER BY name
+        `)
+    return hi[0]
+}
+
+export async function addUserToRole(roleId, userId) {
+    await pool.query(
+        "INSERT INTO user_roles (role_id, user_id) VALUES (?, ?)",
+        [roleId, userId]
+    );
+}
+
+export async function removeUserFromRole(roleId, userId) {
+    await pool.query(
+        "DELETE FROM user_roles WHERE role_id = ? AND user_id = ?",
+        [roleId, userId]
+    );
+}
+
+export async function getRoleMembers(roleId) {
+    const [rows] = await pool.query(
+        "SELECT user_id FROM user_roles WHERE role_id = ?",
+        [roleId]
+    );
+    return rows;
+}
+
+export async function getRoleByName(roleName) {
+    const hi = await pool.query(`
+        SELECT name FROM role_names WHERE name = (?)
+        `, [roleName])
+    return hi.length ? hi[0] : null;
+}
+
+export async function getUsersInRole(roleId) {
+    const [rows] = await pool.query(
+        `
+        SELECT user_id
+        FROM user_roles
+        WHERE role_id = ?
+        `,
+        [roleId]
+    );
+
+    return rows;
+}
+
+export async function getUserRoles(id) {
+    const hi = await pool.query(`
+        SELECT role_id FROM user_roles WHERE user_id = (?)
+        `, [id])
+    return hi[0]
 }
