@@ -192,11 +192,9 @@ function formatSlackDateToDateString(dateStr) {
     const commands = [
         { name: "/whoscoming", desc: "Create a poll asking who's attending on that date." },
         { name: "/meetingreport", desc: "Show poll results for the given date or list polls." },
-        /*
-        { name: "/clearmmeetings", desc: "Clears all meeting for a channel" },
-        { name: "/latestmeeting", desc: "Shows latest meeting"},
-        */
-        { name: "/addlead", desc: "Adds a user as a lead"},
+        { name: "/role", desc: "All commands related to creating/deleting roles as well as adding/removing members to roles."},
+        { name: "/ping", desc: "/ping `@<role-name>` <text> will ping all members of a role and send the text." },
+        { name: "/showroles", desc: "/showroles will show all members of a channel and what roles they have.\n/showroles `@<role-name>` will show all roles of channel members who have the `@<role-name>` role." },
         { name: "/help", desc: "Show this help menu." },
     ];
 
@@ -470,8 +468,8 @@ app.command("/role", async ({ ack, command, client }) => {
                         "*Usage:*\n" +
                         "`/role create <name>`\n" +
                         "`/role delete <name>`\n" +
-                        "`/role add <name>`\n" +
-                        "`/role remove <name>`\n" +
+                        "`/role add`\n" +
+                        "`/role remove`\n" +
                         "`/role list`",
                 });
         }
