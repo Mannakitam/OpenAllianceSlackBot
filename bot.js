@@ -657,7 +657,7 @@ app.event("message", async ({ event, client }) => {
   try {
     if (!event.text || event.subtype) return; // ignore bot messages and edits
 
-    const roleMatch = event.text.match(/@(\w[\w-]*)/);
+    const roleMatch = event.text.match(/^@(\w[\w-]*)/);
     if (!roleMatch) return;
 
     const roleName = roleMatch[1];
@@ -680,7 +680,6 @@ app.event("message", async ({ event, client }) => {
     console.error("Error handling role ping message:", err);
   }
 });
-
 
 app.command("/help", async ({ ack, command, client }) => {
     await ack();
@@ -731,17 +730,40 @@ app.command("/showroles", async ({ ack, command, client }) => {
         const blocks = [];
 
         for (const userId of allMembers) {
-            const userRoles = await getUserRoles(userId); // returns array of role objects {id, name}
-            console.log(userRoles)
-            // If a role filter is applied, skip users without it
-            if (roleFilter && !userRoles.some(r => r.role_id === roleFilter)) continue;
+            if (userId === "USLACKBOT") continue;
 
-            const res = await client.users.info({ user: userId });
-            const user = res.user;
-            const displayName = user.profile.display_name || user.real_name || "Unknown User";
-            const avatarUrl = user.profile.image_192 || user.profile.image_72;
+            const userRoles = await getUserRoles(userId);
 
-            let roleString = userRoles.map(r => `• \`@${r.role_id}\``).join("\n") || "_No roles_";
+
+            if(!userRoles[0]){
+                continue;
+            }
+
+            console.log("USER:", userId, "ROLES:", userRoles);
+            
+
+            if (roleFilter && !userRoles.some(r => r.role_id === roleFilter)) {
+                continue;
+            }
+
+            let user;
+            try {
+                const res = await client.users.info({ user: userId });
+                user = res.user;
+            } catch {
+                continue;
+            }
+
+            const displayName =
+                user.profile.display_name || user.real_name || "Unknown User";
+
+            const avatarUrl =
+                user.profile.image_192 || user.profile.image_72;
+
+            const roleString =
+                userRoles.length
+                    ? userRoles.map(r => `• @${r.role_id}`).join("\n")
+                    : "_No roles_";
 
             blocks.push(
                 { type: "divider" },
@@ -759,6 +781,7 @@ app.command("/showroles", async ({ ack, command, client }) => {
                 }
             );
         }
+
 
         if (!blocks.length) {
             return client.chat.postEphemeral({
