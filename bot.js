@@ -3,7 +3,7 @@ const { App } = pkg;
 
 import cron from 'node-cron';
 
-import fs from "fs";
+import { readFile,writeFile } from 'node:fs/promises';
 
 import { generateDailyReport } from './openAllianceSummary/generateDailyReport.js'
 
@@ -152,6 +152,25 @@ async function pm(IDs, text) {
     } catch (error) {
         console.error("Error fetching user list:", error);
     }
+}
+
+// Utility: get all members in a channel
+async function getChannelMembers(client, channelId) {
+  let members = [];
+  let cursor;
+
+  do {
+    const res = await client.conversations.members({
+      channel: channelId,
+      cursor,
+      limit: 1000
+    });
+
+    members.push(...res.members);
+    cursor = res.response_metadata?.next_cursor;
+  } while (cursor);
+
+  return members;
 }
 
 // Utility: formate a date
@@ -701,69 +720,83 @@ app.command("/showroles", async ({ ack, command, client }) => {
 
     let roleFilter = null;
     if (text.startsWith("@")) {
-        roleFilter = text.slice(1); // remove "@"
+        roleFilter = text.slice(1).toLowerCase();
     }
 
     try {
-        //Get all members in the channel
-        let allMembers = [];
+        //Open modal immediately to prevent expired_trigger_id
+        const openResult = await client.views.open({
+            trigger_id: command.trigger_id,
+            view: {
+                type: "modal",
+                callback_id: "show_roles_modal",
+                title: { type: "plain_text", text: "Channel Roles" },
+                close: { type: "plain_text", text: "Close" },
+                blocks: [
+                    {
+                        type: "section",
+                        text: { type: "mrkdwn", text: "⏳ Loading roles..." }
+                    }
+                ]
+            }
+        });
+
+        const viewId = openResult.view.id;
+
+        //Fetchs all channel members
+        let members = [];
         let cursor;
+
         do {
             const res = await client.conversations.members({
                 channel: channelId,
                 cursor,
                 limit: 1000
             });
-            allMembers.push(...res.members);
+
+            members.push(...res.members);
             cursor = res.response_metadata?.next_cursor;
         } while (cursor);
 
-        if (!allMembers.length) {
-            return client.chat.postEphemeral({
-                channel: channelId,
-                user: senderId,
-                text: "No members found in this channel."
-            });
+        if (!members.length) {
+            return updateModalWithMessage(client, viewId, "No members found in this channel.");
         }
 
-        //Build message blocks
+        //Build blocks (limit to avoid Slack 100-block limit)
         const blocks = [];
+        let blockCount = 0;
 
-        for (const userId of allMembers) {
-            if (userId === "USLACKBOT") continue;
+        for (const userId of members) {
+
+            // Slack max blocks per view = 100
+            if (blockCount >= 95) break;
 
             const userRoles = await getUserRoles(userId);
 
-
-            if(!userRoles[0]){
-                continue;
+            if (roleFilter) {
+                const hasRole = userRoles.some(r =>
+                    r.role_id.toLowerCase() === roleFilter
+                );
+                if (!hasRole) continue;
             }
 
-            console.log("USER:", userId, "ROLES:", userRoles);
-            
+            const res = await client.users.info({ user: userId });
+            const user = res.user;
 
-            if (roleFilter && !userRoles.some(r => r.role_id === roleFilter)) {
-                continue;
-            }
-
-            let user;
-            try {
-                const res = await client.users.info({ user: userId });
-                user = res.user;
-            } catch {
-                continue;
-            }
+            if (!user || user.deleted || user.is_bot) continue;
 
             const displayName =
-                user.profile.display_name || user.real_name || "Unknown User";
+                user.profile.display_name ||
+                user.real_name ||
+                "Unknown User";
 
             const avatarUrl =
-                user.profile.image_192 || user.profile.image_72;
+                user.profile.image_192 ||
+                user.profile.image_72;
 
-            const roleString =
-                userRoles.length
-                    ? userRoles.map(r => `• @${r.role_id}`).join("\n")
-                    : "_No roles_";
+            const roleString = userRoles.length
+                ? userRoles.map(r => `• \`@${r.role_id}\``).join("\n")
+                : "_No roles_";
 
             blocks.push(
                 { type: "divider" },
@@ -776,43 +809,62 @@ app.command("/showroles", async ({ ack, command, client }) => {
                     accessory: {
                         type: "image",
                         image_url: avatarUrl,
-                        alt_text: "avatar thumbnail"
+                        alt_text: "avatar"
                     }
                 }
             );
-        }
 
+            blockCount += 2;
+        }
 
         if (!blocks.length) {
-            return client.chat.postEphemeral({
-                channel: channelId,
-                user: senderId,
-                text: roleFilter
+            return updateModalWithMessage(
+                client,
+                viewId,
+                roleFilter
                     ? `No members with role *@${roleFilter}* in this channel.`
                     : "No members found."
-            });
+            );
         }
 
-        blocks.push({ type: "divider" });
-
-        //Send ephemeral message
-        await client.chat.postEphemeral({
-            channel: channelId,
-            user: senderId,
-            text: "Roles in this channel",
-            blocks
+        //Update modal with real content
+        await client.views.update({
+            view_id: viewId,
+            view: {
+                type: "modal",
+                callback_id: "show_roles_modal",
+                title: {
+                    type: "plain_text",
+                    text: roleFilter
+                        ? `Members with @${roleFilter}`
+                        : "Channel Roles"
+                },
+                close: { type: "plain_text", text: "Close" },
+                blocks
+            }
         });
 
     } catch (err) {
         console.error("Error with /showroles:", err);
-        await client.chat.postEphemeral({
-            channel: channelId,
-            user: senderId,
-            text: "Something went wrong while fetching roles."
-        });
     }
 });
 
+async function updateModalWithMessage(client, viewId, message) {
+    await client.views.update({
+        view_id: viewId,
+        view: {
+            type: "modal",
+            title: { type: "plain_text", text: "Channel Roles" },
+            close: { type: "plain_text", text: "Close" },
+            blocks: [
+                {
+                    type: "section",
+                    text: { type: "mrkdwn", text: message }
+                }
+            ]
+        }
+    });
+}
 
 /*---------- LOTS OF TEST CODE ----------*/
     async function findConversation() {
