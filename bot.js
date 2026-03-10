@@ -299,7 +299,7 @@ app.view("whoscoming_modal", async ({ ack, body, view, client }) => {
         // Post the poll
         const pollMsg = await client.chat.postMessage({
             channel: channelId,
-            text: `<!channel> Who is going to the meeting on *${safeDate}*?\nReact with:  ✅ yes   ❌ no`,
+            text: `<!channel> Who is going to the meeting on *${safeDate}*?\nReact with:  ✅ yes   ❌ no :watch:  coming late`,
         });
 
         // Add reactions
@@ -312,8 +312,16 @@ app.view("whoscoming_modal", async ({ ack, body, view, client }) => {
         await client.reactions.add({
             channel: channelId,
             timestamp: pollMsg.ts,
+            name: "watch"
+        });
+
+        await client.reactions.add({
+            channel: channelId,
+            timestamp: pollMsg.ts,
             name: "x"
         });
+
+        
 
         // Save poll to JSON
         await addMeeting(channelId, pollMsg.ts, dateInput);
@@ -416,6 +424,10 @@ app.view("meetingreport_modal", async ({ ack, body, view, client }) => {
     const reactions = response.message.reactions || [];
     const yesReaction = reactions.find(r => r.name === "white_check_mark");
     const noReaction = reactions.find(r => r.name === "x");
+    const late = reactions.find(r => r.name === "watch");
+
+    
+
 
     const yesUsers = yesReaction
         ? yesReaction.users.filter(u => u !== botUserId).map(u => `<@${u}>`)
@@ -425,13 +437,18 @@ app.view("meetingreport_modal", async ({ ack, body, view, client }) => {
         ? noReaction.users.filter(u => u !== botUserId).map(u => `<@${u}>`)
         : [];
 
+    const lateUsers = noReaction
+        ? late.users.filter(u => u !== botUserId).map(u => `<@${u}>`)
+        : [];
+
     await client.chat.postEphemeral({
         channel: channelId,
         user: userId,
         text:
             `*Meeting Report for ${new Date(meeting.date).toDateString()}*\n` +
             `✅ Coming: ${yesUsers.length ? yesUsers.join(", ") : "None"}\n` +
-            `❌ Not coming: ${noUsers.length ? noUsers.join(", ") : "None"}`,
+            `:watch: coming late: ${lateUsers.length ? lateUsers.join(", ") : "None"}` +
+            `❌ Not coming: ${noUsers.length ? noUsers.join(", ") : "None"}\n`,
     });
 });
 
