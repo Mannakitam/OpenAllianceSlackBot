@@ -404,6 +404,7 @@ app.view("meetingreport_modal", async ({ ack, body, view, client }) => {
     const channelMeetings = await getMeetingWithTS(channelId);
     const meeting = channelMeetings.find(m => m.ts === selectedTs);
 
+        
     if (!meeting) {
         await client.chat.postEphemeral({
             channel: channelId,
@@ -421,13 +422,37 @@ app.view("meetingreport_modal", async ({ ack, body, view, client }) => {
         timestamp: meeting.ts,
     });
 
-    const reactions = response.message.reactions || [];
-    const yesReaction = reactions.find(r => r.name === "white_check_mark");
-    const noReaction = reactions.find(r => r.name === "x");
-    const late = reactions.find(r => r.name === "watch");
-
+    const reactions = response.message?.reactions || [];
     
+    if(!reactions.find(r => r.name === "white_check_mark")){
+        await client.reactions.add({
+            channel: channelId,
+            timestamp: meeting.ts,
+            name: "white_check_mark"
+        });
+    }
 
+
+    if(!reactions.find(r => r.name === "watch")){
+        await client.reactions.add({
+            channel: channelId,
+            timestamp: meeting.ts,
+            name: "watch"
+        });
+    }
+    
+    if(!reactions.find(r => r.name === "x")){
+        await client.reactions.add({
+            channel: channelId,
+            timestamp: meeting.ts,
+            name: "x"
+        });
+    }
+
+    const NewReactions = response.message?.reactions || [];
+    const yesReaction = NewReactions.find(r => r.name === "white_check_mark");
+    const noReaction = NewReactions.find(r => r.name === "x");
+    const late = NewReactions.find(r => r.name === "watch");
 
     const yesUsers = yesReaction
         ? yesReaction.users.filter(u => u !== botUserId).map(u => `<@${u}>`)
@@ -437,9 +462,10 @@ app.view("meetingreport_modal", async ({ ack, body, view, client }) => {
         ? noReaction.users.filter(u => u !== botUserId).map(u => `<@${u}>`)
         : [];
 
-    const lateUsers = noReaction
+    const lateUsers = late
         ? late.users.filter(u => u !== botUserId).map(u => `<@${u}>`)
         : [];
+    
 
     await client.chat.postEphemeral({
         channel: channelId,
@@ -447,8 +473,8 @@ app.view("meetingreport_modal", async ({ ack, body, view, client }) => {
         text:
             `*Meeting Report for ${new Date(meeting.date).toDateString()}*\n` +
             `✅ Coming: ${yesUsers.length ? yesUsers.join(", ") : "None"}\n` +
-            `:watch: coming late: ${lateUsers.length ? lateUsers.join(", ") : "None"}` +
-            `❌ Not coming: ${noUsers.length ? noUsers.join(", ") : "None"}\n`,
+            `:watch: coming late: ${lateUsers.length ? lateUsers.join(", ") : "None"}\n` +
+            `❌ Not coming: ${noUsers.length ? noUsers.join(", ") : "None"}`,
     });
 });
 
